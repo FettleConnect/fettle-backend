@@ -1,0 +1,123 @@
+services:
+  api:
+    image: ${API_IMAGE}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      livekit-server:
+        condition: service_started
+    ports:
+      - "${APP_BIND_PORT:-8000}:8000"
+    restart: unless-stopped
+    networks:
+      - main-network
+
+  fettle-agent:
+    image: ${AGENT_IMAGE}
+    env_file:
+      - .env
+    depends_on:
+      livekit-server:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - main-network
+
+  celery:
+    image: ${API_IMAGE}
+    command: celery -A app.celery_app.celery_app worker -l info
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - main-network
+
+  livekit-server:
+    image: livekit/livekit-server:latest
+    command: ["--config", "/etc/livekit.yaml"]
+    env_file:
+      - .env
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "${LIVEKIT_PORT:-7880}:7880"
+      - "${LIVEKIT_TCP_PORT:-7881}:7881"
+      - "3478:3478/udp"
+      - "${LIVEKIT_PORT_RANGE_START:-50000}-${LIVEKIT_PORT_RANGE_END:-60000}:${LIVEKIT_PORT_RANGE_START:-50000}-${LIVEKIT_PORT_RANGE_END:-60000}/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    networks:
+      - main-network
+
+  livekit-sip:
+    image: livekit/sip:latest
+    command: ["--config", "/etc/livekit/sip.yaml"]
+    env_file:
+      - .env
+    volumes:
+      - ./sip.yaml:/etc/livekit/sip.yaml:ro
+    depends_on:
+      livekit-server:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    ports:
+      - "5061:5061/tcp"
+      - "5061:5061/udp"
+      - "50000-60000:50000-60000/udp"
+    restart: unless-stopped
+    networks:
+      - main-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - main-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-fettle_staging}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    tmpfs:
+      - /var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - main-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-fettle_staging}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redisdata:
+
+networks:
+  main-network:
+    external: true
