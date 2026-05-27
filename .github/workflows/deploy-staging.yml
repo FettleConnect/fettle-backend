@@ -130,8 +130,8 @@ jobs:
           VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
           VPS_USER: ${{ secrets.STAGING_VPS_USER }}
           VPS_PORT: ${{ secrets.STAGING_VPS_PORT }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

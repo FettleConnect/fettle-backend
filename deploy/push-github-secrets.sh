@@ -40,8 +40,6 @@ set_env_secret() {
 }
 
 for secret_name in \
-  GHCR_USERNAME \
-  GHCR_TOKEN \
   LIVEKIT_API_KEY \
   LIVEKIT_API_SECRET \
   OPENAI_API_KEY \
@@ -56,9 +54,6 @@ for secret_name in \
   do
   require_value "${secret_name}"
 done
-
-set_repo_secret "GHCR_USERNAME" "${GHCR_USERNAME}"
-set_repo_secret "GHCR_TOKEN" "${GHCR_TOKEN}"
 set_repo_secret "LIVEKIT_API_KEY" "${LIVEKIT_API_KEY}"
 set_repo_secret "LIVEKIT_API_SECRET" "${LIVEKIT_API_SECRET}"
 set_repo_secret "OPENAI_API_KEY" "${OPENAI_API_KEY}"
