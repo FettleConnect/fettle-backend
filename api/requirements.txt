@@ -6,6 +6,12 @@ pydantic-settings>=2.3,<3.0
 psycopg[binary]>=3.2,<4.0
 uvicorn[standard]>=0.30,<1.0
 httpx>=0.24.0
-passlib>=1.7.4
+bcrypt>=4.0.0
 PyJWT>=2.8.0
-
+alembic>=1.13,<2.0
+greenlet>=3.0.0
+asgiref>=3.8.0
+boto3>=1.28.0
+python-multipart>=0.0.9
+redis[hiredis]>=5.0.0
+aiofiles>=23.0.0
