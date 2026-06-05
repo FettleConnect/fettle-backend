@@ -54,6 +54,7 @@ from api.app.api.v1.hospital.calls import router as calls_router  # noqa: E402
 from api.app.api.v1.hospital.medivoice import router as medivoice_router  # noqa: E402
 from api.app.api.v1.hospital.management import router as management_router  # noqa: E402
 from api.app.api.v1.hospital.internal import router as internal_router  # noqa: E402
+from api.app.api.v1.chatbot import router as chatbot_router  # noqa: E402
 
 _V1 = "/api/v1"
 
@@ -70,3 +71,4 @@ app.include_router(webhooks_router, prefix=_V1)
 app.include_router(calls_router, prefix=_V1)
 app.include_router(medivoice_router, prefix=_V1)
 app.include_router(management_router, prefix=_V1)
+app.include_router(chatbot_router, prefix=_V1)

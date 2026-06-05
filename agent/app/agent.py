@@ -104,22 +104,26 @@ async def _raise_escalation(
     patient_id: str | None = None,
     phone_number: str = "",
 ) -> str:
-    """Create an escalation record via the internal FastAPI endpoint."""
+    """
+    Create an escalation record via POST /api/internal/escalation/.
+    Protected by X-Internal-API-Secret — no JWT needed from the agent.
+    """
     secret = _internal_secret()
     if not secret:
         return "Escalation failed: internal secret not configured"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                f"{_internal_api_base()}/api/v1/escalations/feedback",
-                json={
-                    "patient_id": patient_id,
-                    "issue_description": issue_description,
-                    "department": department,
-                },
+                f"{_internal_api_base()}/api/internal/escalation/",
                 headers={
                     "X-Internal-API-Secret": secret,
                     "Content-Type": "application/json",
+                },
+                json={
+                    "patient_id": patient_id,
+                    "phone_number": phone_number,
+                    "issue_description": issue_description,
+                    "department": department,
                 },
             )
             if resp.status_code == 200 and resp.json().get("error") == 0:

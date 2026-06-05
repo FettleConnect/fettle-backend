@@ -221,3 +221,92 @@ async def patient_lookup_by_phone(
     ]
 
     return {"error": 0, "count": len(patient_data), "data": patient_data}
+
+
+@router.post("/internal/escalation/")
+@router.post("/internal/escalation")
+async def agent_escalation(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """
+    Agent-initiated escalation endpoint — protected by X-Internal-API-Secret.
+    Called by the LiveKit agent when a patient needs urgent assistance.
+    Lookup patient by phone_number OR patient_id. Creates Escalation record +
+    sends WhatsApp notification to the hospital admin.
+    """
+    _check_secret(request)
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    patient_id_str = data.get("patient_id")
+    phone_number = data.get("phone_number", "").strip()
+    issue_description = data.get("issue_description", "Agent-detected escalation")
+    department = data.get("department", "")
+
+    patient: Patient | None = None
+
+    # Try lookup by patient_id first
+    if patient_id_str and patient_id_str not in (None, "", "0", 0):
+        try:
+            patient = await session.scalar(
+                select(Patient).where(Patient.id == uuid.UUID(patient_id_str))
+            )
+        except (ValueError, AttributeError):
+            pass
+
+    # Fall back to phone number lookup
+    if patient is None and phone_number:
+        normalized = _normalize_phone(phone_number)
+        suffix = normalized[-10:] if len(normalized) > 10 else normalized
+        patient = await session.scalar(
+            select(Patient).where(
+                or_(
+                    Patient.mobile_no.like(f"%{suffix}"),
+                    Patient.mobile_no == phone_number,
+                )
+            )
+        )
+
+    if patient is None:
+        return {"error": 1, "msg": "Patient not found"}
+
+    # Create escalation
+    esc = Escalation(
+        id=uuid.uuid4(),
+        organization_id=patient.organization_id,
+        patient_id=patient.id,
+        issue_description=issue_description,
+        department=department or patient.department,
+    )
+    session.add(esc)
+    await session.flush()
+
+    # Notify admin via WhatsApp (fire-and-forget)
+    import asyncio
+    from api.app.models.organization import Organization as Org
+
+    org_name = await session.scalar(
+        select(Org.name).where(Org.id == patient.organization_id)
+    ) or "Hospital"
+
+    async def _notify() -> None:
+        from api.app.services.whatsapp import send_whatsapp
+        admin_phone = os.environ.get("ADMIN_PHONE", "+917032451866")
+        await send_whatsapp(
+            to_number=admin_phone,
+            template_name="escalation_info",
+            template_params=[org_name, patient.mobile_no, issue_description, "Automated Escalation"],
+        )
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(_notify())
+    except RuntimeError:
+        pass
+
+    return {"error": 0, "msg": "Escalation recorded"}
