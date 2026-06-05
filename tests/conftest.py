@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +12,8 @@ from fastapi.testclient import TestClient
 from fettle_backend.app.main import create_app
 from fettle_backend.platform.db.session import SessionFactory
 from fettle_backend.products.transcribe.bootstrap import reset_transcribe_runtime_state, seed_transcribe_defaults
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def pytest_configure() -> None:
@@ -20,9 +24,9 @@ def pytest_configure() -> None:
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     subprocess.run(
-        [".venv/bin/alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         check=True,
-        cwd="/home/snehit/fettle/fettle-backend",
+        cwd=REPO_ROOT,
     )
 
     async def _prepare() -> None:
