@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, time
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    pass
 
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
+from api.app.models.organization import Organization
 
 router = APIRouter(prefix="/medivoice", tags=["medivoice"])
 
@@ -183,6 +189,155 @@ async def get_session(
             for t in transcripts
         ],
     }
+
+
+class SyncIn(BaseModel):
+    doctorEmail: str
+    patientName: str | None = None
+    patientMobile: str | None = None
+    patientEmail: str | None = None
+    overallSummary: str | None = None
+    diagnosis: str | None = None
+    medicines: list | None = None
+    revisitDate: date | None = None
+    revisitTime: time | None = None
+    metaData: dict | None = None
+    transcriptions: list[dict] | None = None
+
+
+@router.post("/sync")
+async def sync_session(
+    request: Request,
+    body: SyncIn,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """
+    External sync webhook — creates a MediVoice session from an external source
+    (e.g. the MediVoice PWA). Protected by X-Fettle-Secret header.
+    """
+    import os
+
+    secret_env = os.environ.get("INTERNAL_API_SHARED_SECRET", "")
+    provided = request.headers.get("X-Fettle-Secret", "")
+    if not secret_env or provided != secret_env:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+    # Lookup doctor by email
+    doctor = await session.scalar(
+        select(User).where(User.email == body.doctorEmail.lower().strip(), User.role == "doctor")
+    )
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    meta = body.metaData or {}
+    diagnosis = body.diagnosis or meta.get("diagnosis") or meta.get("clinicalSummary")
+    medicines = body.medicines or meta.get("medicines") or meta.get("medications") or []
+    revisit_date = body.revisitDate or meta.get("revisit_date") or meta.get("revisitDate")
+    revisit_time = body.revisitTime or meta.get("revisit_time")
+
+    mv = MediVoiceSession(
+        id=uuid.uuid4(),
+        organization_id=doctor.organization_id,
+        doctor_id=doctor.id,
+        patient_name=body.patientName,
+        patient_mobile=body.patientMobile,
+        patient_email=body.patientEmail,
+        overall_summary=body.overallSummary,
+        diagnosis=diagnosis,
+        medicines=medicines,
+        revisit_date=revisit_date,
+        revisit_time=revisit_time,
+        meta_data=meta,
+    )
+    session.add(mv)
+    await session.flush()
+
+    for t in (body.transcriptions or []):
+        session.add(MediVoiceTranscription(
+            id=uuid.uuid4(),
+            organization_id=doctor.organization_id,
+            session_id=mv.id,
+            speaker=t.get("speaker", ""),
+            text=t.get("text", ""),
+            timestamp=t.get("timestamp", 0.0),
+        ))
+
+    from api.app.worker.tasks import schedule_reminder_calls, send_prescription_notifications
+    send_prescription_notifications.delay(str(mv.id))
+    schedule_reminder_calls.delay(str(mv.id))
+
+    return {"error": 0, "msg": "Sync successful", "session_id": str(mv.id)}
+
+
+@router.get("/sessions/{session_id}/artifacts/{artifact_type}")
+async def get_session_artifact(
+    session_id: uuid.UUID,
+    artifact_type: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> "Response":
+    """Stream session artifact (transcript, audio) from S3."""
+    from fastapi.responses import Response as _Response
+    from api.app.services.s3 import get_presigned_url
+
+    if artifact_type not in ("transcript", "audio", "pdf"):
+        raise HTTPException(status_code=400, detail="Invalid artifact type. Use: transcript, audio, pdf")
+
+    mv = await _get_session_or_404(session, session_id, current_user)
+
+    if artifact_type == "audio":
+        # Redirect to presigned URL
+        url = get_presigned_url(f"s3://fettle-sessions/{session_id}/audio.ogg")
+        return _Response(status_code=302, headers={"Location": url or ""})
+
+    if artifact_type == "transcript":
+        # Build transcript text from DB
+        transcripts = (await session.execute(
+            select(MediVoiceTranscription)
+            .where(MediVoiceTranscription.session_id == session_id)
+            .order_by(MediVoiceTranscription.timestamp)
+        )).scalars().all()
+
+        lines = [f"[{t.speaker.upper()}] {t.text}" for t in transcripts]
+        content = "\n".join(lines).encode()
+        return _Response(
+            content=content,
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="transcript_{session_id}.txt"'},
+        )
+
+    # PDF — basic HTML-to-text fallback (WeasyPrint not guaranteed in env)
+    org = await session.scalar(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    doctor = await session.scalar(select(User).where(User.id == mv.doctor_id))
+    transcripts = (await session.execute(
+        select(MediVoiceTranscription)
+        .where(MediVoiceTranscription.session_id == session_id)
+        .order_by(MediVoiceTranscription.timestamp)
+    )).scalars().all()
+
+    lines = [
+        f"Hospital: {org.name if org else 'N/A'}",
+        f"Doctor: {doctor.name if doctor else 'N/A'}",
+        f"Patient: {mv.patient_name or 'N/A'}",
+        f"Date: {mv.created_at.strftime('%Y-%m-%d')}",
+        "",
+        f"Diagnosis: {mv.diagnosis or 'N/A'}",
+        f"Summary: {mv.overall_summary or 'N/A'}",
+        "",
+        "Prescription:",
+        *(f"  - {m}" if isinstance(m, str) else f"  - {m.get('name')} {m.get('dosage','')}" for m in (mv.medicines or [])),
+        "",
+        "Transcript:",
+        *(f"  [{t.speaker.upper()}] {t.text}" for t in transcripts),
+    ]
+    content = "\n".join(lines).encode()
+    return _Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="prescription_{session_id}.txt"'},
+    )
 
 
 async def _get_session_or_404(session, session_id: uuid.UUID, user: User) -> MediVoiceSession:

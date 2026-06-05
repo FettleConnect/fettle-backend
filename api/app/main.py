@@ -52,10 +52,14 @@ from api.app.api.v1.hospital.inbound_dashboard import router as inbound_dash_rou
 from api.app.api.v1.hospital.webhooks import router as webhooks_router  # noqa: E402
 from api.app.api.v1.hospital.calls import router as calls_router  # noqa: E402
 from api.app.api.v1.hospital.medivoice import router as medivoice_router  # noqa: E402
+from api.app.api.v1.hospital.management import router as management_router  # noqa: E402
+from api.app.api.v1.hospital.internal import router as internal_router  # noqa: E402
 
 _V1 = "/api/v1"
 
 app.include_router(health_router)
+# Internal API — served at root /api/ (not /api/v1/) to match legacy agent paths
+app.include_router(internal_router, prefix="/api")
 app.include_router(auth_router, prefix=_V1)
 app.include_router(tenant_router, prefix=_V1)
 app.include_router(patients_router, prefix=_V1)
@@ -65,3 +69,4 @@ app.include_router(inbound_dash_router, prefix=_V1)
 app.include_router(webhooks_router, prefix=_V1)
 app.include_router(calls_router, prefix=_V1)
 app.include_router(medivoice_router, prefix=_V1)
+app.include_router(management_router, prefix=_V1)

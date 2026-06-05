@@ -827,6 +827,226 @@ async def escalation_engagement(
     )
 
 
+@router.get("/roi")
+async def roi_metrics(
+    call_direction: str = Query(default="outbound", enum=["outbound", "inbound"]),
+    start_date: Optional[date] = Query(default=None),
+    end_date: Optional[date] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """
+    Financial + efficiency ROI metrics.
+    Formulae (from legacy):
+      Revenue Influenced  = Appointments Booked × ₹650
+      Leakage Prevented   = Missed Calls × 0.42 × ₹650
+      Staff Hours Saved   = Total Call Duration (minutes) / 60
+      Equivalent FTE      = Total Call Duration / 6000
+      Cost Efficiency     = FTE × ₹40,000
+    """
+    org_id = current_user.organization_id
+    today = end_date or date.today()
+    start = start_date or (today - timedelta(days=730))
+
+    if call_direction == "inbound":
+        from api.app.models.hospital.call import InboundCall, InboundFeedback
+
+        attempts = (await session.scalar(
+            select(func.count(InboundCall.id))
+            .where(
+                InboundCall.organization_id == org_id,
+                func.date(InboundCall.started_at).between(start, today),
+            )
+        )) or 0
+
+        missed = (await session.scalar(
+            select(func.count(InboundCall.id))
+            .where(
+                InboundCall.organization_id == org_id,
+                InboundCall.calling_process == "not_connected",
+                func.date(InboundCall.started_at).between(start, today),
+            )
+        )) or 0
+
+        booked, total_dur = (await session.execute(
+            select(
+                func.count(InboundFeedback.id).filter(InboundFeedback.call_outcome == "positive").label("booked"),
+                func.sum(cast(InboundFeedback.call_duration, Float)).label("tdur"),
+            )
+            .join(InboundCall, InboundFeedback.inbound_call_id == InboundCall.id)
+            .where(InboundCall.organization_id == org_id)
+        )).one()
+    else:
+        attempts = (await session.scalar(
+            select(func.count(OutboundCall.id))
+            .join(Patient, OutboundCall.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(OutboundCall.started_at).between(start, today),
+            )
+        )) or 0
+
+        missed = (await session.scalar(
+            select(func.count(OutboundCall.id))
+            .join(Patient, OutboundCall.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                OutboundCall.calling_process == "not_connected",
+                func.date(OutboundCall.started_at).between(start, today),
+            )
+        )) or 0
+
+        booked, total_dur = (await session.execute(
+            select(
+                func.count(CallFeedback.id).filter(CallFeedback.call_outcome == "positive").label("booked"),
+                func.sum(cast(CallFeedback.call_duration, Float)).label("tdur"),
+            )
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(CallFeedback.called_at).between(start, today),
+            )
+        )).one()
+
+    booked = booked or 0
+    tdur = float(total_dur or 0)  # minutes
+
+    staff_hours = round(tdur / 60, 1)
+    fte = round(tdur / 6000, 2)
+
+    return {
+        "error": 0,
+        "roi_financial": [
+            {"name": "Interactions", "value": attempts, "unit": ""},
+            {"name": "Appointments Booked", "value": booked, "unit": ""},
+            {"name": "Revenue Influenced", "value": booked * 650, "unit": "₹"},
+            {"name": "Leakage Prevented", "value": int(missed * 0.42 * 650), "unit": "₹"},
+        ],
+        "roi_efficiency": [
+            {"name": "Staff Hours Saved", "value": staff_hours, "unit": "hrs"},
+            {"name": "Equivalent FTE Freed", "value": fte, "unit": "FTE"},
+            {"name": "Cost Efficiency Value", "value": int(fte * 40000), "unit": "₹"},
+        ],
+    }
+
+
+@router.get("/departments")
+async def department_analytics(
+    call_direction: str = Query(default="outbound", enum=["outbound", "inbound"]),
+    start_date: Optional[date] = Query(default=None),
+    end_date: Optional[date] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """Department breakdown: interactions, bookings, conversion rate, revenue."""
+    org_id = current_user.organization_id
+    today = end_date or date.today()
+    start = start_date or (today - timedelta(days=730))
+
+    if call_direction == "inbound":
+        from api.app.models.hospital.call import (
+            InboundCall,
+            InboundCommunityEngagement,
+            InboundFeedback,
+        )
+
+        # Per-department interaction counts
+        dept_rows = (await session.execute(
+            select(InboundCall.department.label("dept"), func.count(InboundCall.id).label("interactions"))
+            .where(
+                InboundCall.organization_id == org_id,
+                func.date(InboundCall.started_at).between(start, today),
+            )
+            .group_by(InboundCall.department)
+        )).all()
+
+        # Bookings per department (positive outcome in feedback)
+        book_rows = (await session.execute(
+            select(InboundCall.department.label("dept"), func.count(InboundFeedback.id).label("bookings"))
+            .join(InboundFeedback, InboundFeedback.inbound_call_id == InboundCall.id)
+            .where(
+                InboundCall.organization_id == org_id,
+                InboundFeedback.call_outcome == "positive",
+            )
+            .group_by(InboundCall.department)
+        )).all()
+
+        book_map = {r.dept: r.bookings for r in book_rows}
+
+        department_table = [
+            {
+                "department": r.dept or "General",
+                "interactions": r.interactions,
+                "bookings": book_map.get(r.dept, 0),
+                "conversion": f"{(book_map.get(r.dept, 0) / r.interactions * 100 if r.interactions else 0):.1f}%",
+                "revenue": book_map.get(r.dept, 0) * 650,
+            }
+            for r in dept_rows
+        ]
+
+        intent_rows = (await session.execute(
+            select(
+                InboundCommunityEngagement.engagement_type.label("etype"),
+                func.count(InboundCommunityEngagement.id).label("value"),
+            )
+            .join(InboundCall, InboundCommunityEngagement.inbound_call_id == InboundCall.id)
+            .where(
+                InboundCall.organization_id == org_id,
+                func.date(InboundCommunityEngagement.created_at).between(start, today),
+            )
+            .group_by(InboundCommunityEngagement.engagement_type)
+            .order_by(func.count(InboundCommunityEngagement.id).desc())
+        )).all()
+
+    else:
+        # Outbound: dept from patients table
+        dept_rows = (await session.execute(
+            select(Patient.department.label("dept"), func.count(Patient.id).label("interactions"))
+            .where(Patient.organization_id == org_id)
+            .group_by(Patient.department)
+        )).all()
+
+        book_rows = (await session.execute(
+            select(Patient.department.label("dept"), func.count(CallFeedback.id).label("bookings"))
+            .join(CallFeedback, CallFeedback.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id, CallFeedback.call_outcome == "positive")
+            .group_by(Patient.department)
+        )).all()
+        book_map = {r.dept: r.bookings for r in book_rows}
+
+        department_table = [
+            {
+                "department": r.dept or "General",
+                "interactions": r.interactions,
+                "bookings": book_map.get(r.dept, 0),
+                "conversion": f"{(book_map.get(r.dept, 0) / r.interactions * 100 if r.interactions else 0):.1f}%",
+                "revenue": book_map.get(r.dept, 0) * 650,
+            }
+            for r in dept_rows
+        ]
+
+        intent_rows = (await session.execute(
+            select(
+                CommunityEngagement.engagement_type.label("etype"),
+                func.count(CommunityEngagement.id).label("value"),
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(CommunityEngagement.created_at).between(start, today),
+            )
+            .group_by(CommunityEngagement.engagement_type)
+            .order_by(func.count(CommunityEngagement.id).desc())
+        )).all()
+
+    top_intents = [
+        {"intent": r.etype.replace("_", " ").title(), "value": r.value}
+        for r in intent_rows
+    ]
+
+    return {"error": 0, "department_table": department_table, "top_intents": top_intents}
+
+
 @router.get("/recent-activity", response_model=RecentActivityResponse)
 async def recent_activity(
     current_user: User = Depends(get_current_user),
