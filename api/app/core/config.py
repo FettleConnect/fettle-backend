@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ Concurrency limits
     call_concurrency_limit: int = 3
 
+    # ------------------------------------------------------------------ Internal API
+    internal_api_shared_secret: str = ""
+    internal_api_base_url: str = "http://api:8000"
+
     @field_validator("jwt_secret_key", mode="before")
     @classmethod
     def _require_jwt_secret(cls, v: str) -> str:

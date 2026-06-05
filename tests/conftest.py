@@ -27,6 +27,9 @@ os.environ.setdefault(
         "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
     ),
 )
+os.environ.setdefault("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
+
+from unittest.mock import MagicMock, patch
 
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
@@ -150,3 +153,32 @@ def make_org_id() -> uuid.UUID:
 
 def make_user_id() -> uuid.UUID:
     return uuid.uuid4()
+
+
+# ── Celery task mock — prevents broker connection attempts in all tests ────────
+
+@pytest.fixture(autouse=True)
+def _mock_celery_dispatch():
+    """
+    Prevent Celery tasks from actually dispatching to the Redis broker during tests.
+    All task.delay() / apply_async() calls return a mock.
+    """
+    _task = MagicMock()
+    _task.id = "test-task-id-fixture"
+
+    _targets = [
+        "api.app.worker.tasks.run_campaign_task.delay",
+        "api.app.worker.tasks.call_outbound_task.delay",
+        "api.app.worker.tasks.process_outbound_calls.delay",
+        "api.app.worker.tasks.process_inbound_calls.delay",
+        "api.app.worker.tasks.send_prescription_notifications.delay",
+        "api.app.worker.tasks.reminder_task.delay",
+        "api.app.worker.tasks.schedule_reminder_calls.delay",
+        "api.app.worker.tasks.reminder_task.apply_async",
+    ]
+    managers = [patch(t, return_value=_task) for t in _targets]
+    for m in managers:
+        m.start()
+    yield
+    for m in managers:
+        m.stop()
