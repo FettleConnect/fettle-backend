@@ -13,6 +13,7 @@ import pytest_asyncio
 # Windows: psycopg async requires SelectorEventLoop, not the default ProactorEventLoop
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -30,6 +31,7 @@ os.environ.setdefault(
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.main import app  # noqa: E402
+from api.app.db.session import get_async_session  # noqa: E402
 
 
 # ── Test database engine ──────────────────────────────────────────────────────
@@ -45,10 +47,9 @@ def _check_postgres_available() -> bool:
     """Returns True if PostgreSQL is reachable at the test URL."""
     try:
         import psycopg
+        import re
 
         sync_url = TEST_DB_URL.replace("postgresql+psycopg_async://", "")
-        # Parse user:password@host:port/dbname
-        import re
         m = re.match(r"(\w+):([^@]*)@([^:/]+):?(\d+)?/(\w+)", sync_url)
         if not m:
             return False
@@ -97,31 +98,48 @@ async def db_engine():
 
 @pytest_asyncio.fixture
 async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Each test gets its own session, rolled back after completion."""
-    session_factory = async_sessionmaker(
+    """
+    Each test gets its own session.
+    Data flushed but not committed is visible within this session and the app
+    (because async_client overrides get_async_session to use the same session).
+    Rolled back after the test to keep the DB clean.
+    """
+    async_session_maker = async_sessionmaker(
         bind=db_engine,
         class_=AsyncSession,
         expire_on_commit=False,
         autoflush=False,
     )
-    async with session_factory() as session:
-        yield session
-        await session.rollback()
-
-
-@pytest.fixture
-def sync_client() -> TestClient:
-    """Synchronous WSGI-style test client for simple endpoint tests."""
-    return TestClient(app)
+    session = async_session_maker()
+    yield session
+    await session.rollback()
+    await session.close()
 
 
 @pytest_asyncio.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
-    """Async HTTPX client for async test scenarios."""
+async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """
+    Async HTTPX client whose FastAPI app shares the test session.
+    This ensures data seeded via db_session is visible to the app during the test.
+    """
+
+    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_async_session] = _override_session
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
+
+    app.dependency_overrides.pop(get_async_session, None)
+
+
+@pytest.fixture
+def sync_client() -> TestClient:
+    """Synchronous WSGI-style test client for simple endpoint tests (no DB seed needed)."""
+    return TestClient(app)
 
 
 # ── Reusable test data factories ──────────────────────────────────────────────

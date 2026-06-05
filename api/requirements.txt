@@ -15,3 +15,6 @@ boto3>=1.28.0
 python-multipart>=0.0.9
 redis[hiredis]>=5.0.0
 aiofiles>=23.0.0
+pandas>=2.1.0
+openpyxl>=3.1.0
+humanize>=4.9.0
