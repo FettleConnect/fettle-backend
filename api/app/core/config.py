@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     internal_api_shared_secret: str = ""
     internal_api_base_url: str = "http://api:8000"
 
+    # ------------------------------------------------------------------ PayPal
+    paypal_client_id: str = ""
+    paypal_client_secret: str = ""
+    paypal_api_base: str = "https://api-m.sandbox.paypal.com"
+    consultation_price_usd: float = 15.00
+
     @field_validator("jwt_secret_key", mode="before")
     @classmethod
     def _require_jwt_secret(cls, v: str) -> str:

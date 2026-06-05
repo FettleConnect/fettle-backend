@@ -128,6 +128,9 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
 
     async def _override_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
+        # Flush after each request so subsequent requests see pending adds
+        # (mirrors the production commit, but stays within the test's rollback)
+        await db_session.flush()
 
     app.dependency_overrides[get_async_session] = _override_session
 

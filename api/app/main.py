@@ -55,10 +55,17 @@ from api.app.api.v1.hospital.medivoice import router as medivoice_router  # noqa
 from api.app.api.v1.hospital.management import router as management_router  # noqa: E402
 from api.app.api.v1.hospital.internal import router as internal_router  # noqa: E402
 from api.app.api.v1.chatbot import router as chatbot_router  # noqa: E402
+from api.app.api.v1.chatbot_compat import (  # noqa: E402
+    _GOOGLE_AUTH_ROUTER as google_auth_router,
+    _LEGACY_ROUTER as legacy_compat_router,
+)
 
 _V1 = "/api/v1"
 
 app.include_router(health_router)
+# Legacy-compatible routes — mounted at root to match what the frontend calls
+app.include_router(google_auth_router)
+app.include_router(legacy_compat_router)
 # Internal API — served at root /api/ (not /api/v1/) to match legacy agent paths
 app.include_router(internal_router, prefix="/api")
 app.include_router(auth_router, prefix=_V1)

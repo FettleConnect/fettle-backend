@@ -8,13 +8,20 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 # ── Ensure the api package root is on sys.path when running alembic directly ─
+# Add two levels up (fettle-backend/) so "api" package is importable outside Docker.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from api.app.core.config import settings  # noqa: E402
-from api.app.db.base import Base  # noqa: E402
-
-# Import all models so their tables are registered with metadata
-import api.app.models  # noqa: F401, E402
+# Support both:
+#   - Outside Docker (fettle-backend/): from api.app.* import ...
+#   - Inside Docker (/app/):            from app.* import ...
+try:
+    from api.app.core.config import settings  # noqa: E402
+    from api.app.db.base import Base  # noqa: E402
+    import api.app.models  # noqa: F401, E402
+except ModuleNotFoundError:
+    from app.core.config import settings  # type: ignore[no-redef]  # noqa: E402
+    from app.db.base import Base  # type: ignore[no-redef]  # noqa: E402
+    import app.models  # type: ignore[no-redef]  # noqa: F401, E402
 
 config = context.config
 
