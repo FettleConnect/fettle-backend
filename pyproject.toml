@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fettle-backend"
+version = "0.1.0"
+description = "Unified Fettle backend modular monolith"
+readme = "docs/transcribe-backend-migration-plan.md"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.16.0,<2.0.0",
+  "asyncpg>=0.30.0,<1.0.0",
+  "fastapi>=0.116.0,<1.0.0",
+  "httpx>=0.28.1,<1.0.0",
+  "pydantic-settings>=2.10.0,<3.0.0",
+  "sqlalchemy>=2.0.43,<3.0.0",
+  "uvicorn>=0.35.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.20.0,<2.0.0",
+  "pre-commit>=4.0.0,<5.0.0",
+  "pytest>=9.0.0,<10.0.0",
+  "pytest-asyncio>=1.1.0,<2.0.0",
+  "ruff>=0.14.0,<1.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fettle_backend"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_configs = true

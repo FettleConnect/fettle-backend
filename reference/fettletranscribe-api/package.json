@@ -1,0 +1,29 @@
+{
+  "name": "@medivoice/api",
+  "version": "0.28.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -b tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@aws-sdk/s3-request-presigner": "^3.888.0",
+    "@medivoice/domain": "0.28.0",
+    "@medivoice/shared": "0.28.0",
+    "express": "^5.1.0",
+    "mongodb": "^6.18.0",
+    "pdf-lib": "^1.17.1",
+    "twilio": "^5.10.4",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "tsx": "^4.20.6"
+  }
+}

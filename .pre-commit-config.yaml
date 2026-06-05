@@ -1,0 +1,36 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format-check
+        name: ruff format check
+        entry: .venv/bin/ruff format --check .
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: ruff-check
+        name: ruff lint
+        entry: .venv/bin/ruff check .
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: mypy
+        name: mypy type validation
+        entry: .venv/bin/mypy src/fettle_backend
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: contract-tests
+        name: contract tests
+        entry: .venv/bin/python -m pytest tests/contract -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: conventional-commit-message
+        name: conventional commit message
+        entry: .venv/bin/python scripts/validate_commit_msg.py
+        language: system
+        stages: [commit-msg]
