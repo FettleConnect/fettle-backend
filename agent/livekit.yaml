@@ -1,0 +1,18 @@
+port: ${LIVEKIT_PORT:-7880}
+log_level: ${LIVEKIT_LOG_LEVEL:-info}
+
+keys:
+  ${LIVEKIT_API_KEY:-replace-me}: ${LIVEKIT_API_SECRET:-replace-me}
+
+rtc:
+  node_ip: ${LIVEKIT_NODE_IP:-0.0.0.0}
+  tcp_port: ${LIVEKIT_TCP_PORT:-7881}
+  port_range_start: ${LIVEKIT_PORT_RANGE_START:-50000}
+  port_range_end: ${LIVEKIT_PORT_RANGE_END:-60000}
+  use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+
+redis:
+  address: ${LIVEKIT_REDIS_ADDRESS:-redis:6379}
+
+turn:
+  enabled: ${LIVEKIT_TURN_ENABLED:-false}

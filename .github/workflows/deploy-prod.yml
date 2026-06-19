@@ -1,0 +1,168 @@
+name: deploy-production
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load project variables
+        run: |
+          APP_NAME="${APP_NAME:-${GITHUB_REPOSITORY##*/}}"
+          APP_BIND_PORT="${APP_BIND_PORT:-8000}"
+          PUBLIC_PORT="${PUBLIC_PORT:-80}"
+          SERVER_NAME="${SERVER_NAME:-_}"
+          IMAGE_TAG="${GITHUB_REF_NAME}"
+
+          echo "APP_NAME=${APP_NAME}" >> "$GITHUB_ENV"
+          echo "APP_DIR=/opt/${APP_NAME}" >> "$GITHUB_ENV"
+          echo "API_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${APP_NAME}-api" >> "$GITHUB_ENV"
+          echo "AGENT_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${APP_NAME}-agent" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "APP_BIND_PORT=${APP_BIND_PORT}" >> "$GITHUB_ENV"
+          echo "PUBLIC_PORT=${PUBLIC_PORT}" >> "$GITHUB_ENV"
+          echo "SERVER_NAME=${SERVER_NAME}" >> "$GITHUB_ENV"
+
+      - name: Install envsubst
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          push: true
+          tags: |
+            ${{ env.API_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.API_IMAGE }}:latest
+
+      - name: Build and push agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent
+          push: true
+          tags: |
+            ${{ env.AGENT_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.AGENT_IMAGE }}:latest
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+
+      - name: Add production host key
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_PORT: ${{ secrets.PROD_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${PROD_PORT:-22}" "${PROD_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Upload deployment files to production
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_PORT: ${{ secrets.PROD_PORT }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          ssh -p "${PROD_PORT:-22}" "${PROD_USER}@${PROD_HOST}" "mkdir -p \"${APP_DIR}\""
+          scp -P "${PROD_PORT:-22}" deploy/prod/docker-compose.prod.yml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/docker-compose.prod.yml"
+          scp -P "${PROD_PORT:-22}" deploy/prod/sip.yaml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/sip.yaml"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          livekit_api_key = os.environ["LIVEKIT_API_KEY"]
+          livekit_api_secret = os.environ["LIVEKIT_API_SECRET"]
+
+          Path(".livekit.yaml").write_text(
+              "\n".join(
+                  [
+                      "port: 7880",
+                      "log_level: info",
+                      "",
+                      "keys:",
+                      f"  {livekit_api_key}: {livekit_api_secret}",
+                      "",
+                      "rtc:",
+                      "  node_ip: 0.0.0.0",
+                      "  tcp_port: 7881",
+                      "  port_range_start: 50000",
+                      "  port_range_end: 60000",
+                      "  use_external_ip: true",
+                      "",
+                      "redis:",
+                      "  address: redis:6379",
+                      "",
+                      "turn:",
+                      "  enabled: false",
+                      "",
+                  ]
+              )
+          )
+          PY
+          scp -P "${PROD_PORT:-22}" .livekit.yaml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/livekit.yaml"
+          envsubst '${APP_NAME} ${APP_BIND_PORT} ${PUBLIC_PORT} ${SERVER_NAME}' < deploy/prod/nginx/site.conf.template > .site.conf
+          scp -P "${PROD_PORT:-22}" .site.conf "${PROD_USER}@${PROD_HOST}:/tmp/${APP_NAME}.conf"
+
+      - name: Deploy on production
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_PORT: ${{ secrets.PROD_PORT }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          printf '%s\n' \
+            "API_IMAGE=${API_IMAGE}:${IMAGE_TAG}" \
+            "AGENT_IMAGE=${AGENT_IMAGE}:${IMAGE_TAG}" \
+            "APP_BIND_PORT=${APP_BIND_PORT}" \
+            "PUBLIC_PORT=${PUBLIC_PORT}" \
+            "SERVER_NAME=${SERVER_NAME}" \
+            "LIVEKIT_URL=http://livekit-server:7880" \
+            "LIVEKIT_API_KEY=${LIVEKIT_API_KEY}" \
+            "LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}" \
+            "LIVEKIT_ROOM_NAME=default" \
+            "OPENAI_API_KEY=${OPENAI_API_KEY}" > .prod.env
+
+          scp -P "${PROD_PORT:-22}" .prod.env "${PROD_USER}@${PROD_HOST}:${APP_DIR}/.env"
+
+          ssh -p "${PROD_PORT:-22}" "${PROD_USER}@${PROD_HOST}" "
+            set -euo pipefail
+            cd '${APP_DIR}'
+            docker network inspect main-network >/dev/null 2>&1 || docker network create main-network
+            echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin
+            docker compose --env-file .env -f docker-compose.prod.yml pull
+            docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -af --filter 'until=24h' || true
+
+            sudo mv '/tmp/${APP_NAME}.conf' '/etc/nginx/conf.d/${APP_NAME}.conf'
+            sudo nginx -t
+            sudo nginx -s reload || sudo systemctl reload nginx
+          "
+
+          rm -f .prod.env
+          rm -f .site.conf
