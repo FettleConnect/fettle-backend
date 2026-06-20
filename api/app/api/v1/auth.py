@@ -45,7 +45,9 @@ async def login(
         role=user.role,
     )
 
-    permissions = _extract_permissions(user) if user.role in ("hospital_user", "doctor") else None
+    permissions = (
+        _extract_permissions(user) if user.role in ("hospital_user", "doctor") else None
+    )
 
     return TokenResponse(
         token=token,

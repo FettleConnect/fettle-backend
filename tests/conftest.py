@@ -36,13 +36,12 @@ import api.app.models  # noqa: F401, E402 — registers all tables with Base.met
 from api.app.main import app  # noqa: E402
 from api.app.db.session import get_async_session  # noqa: E402
 
-
 # ── Test database engine ──────────────────────────────────────────────────────
 
-TEST_DB_URL = os.environ["DATABASE_URL"].replace(
-    "postgresql+psycopg://", "postgresql+psycopg_async://"
-).replace(
-    "postgresql://", "postgresql+psycopg_async://"
+TEST_DB_URL = (
+    os.environ["DATABASE_URL"]
+    .replace("postgresql+psycopg://", "postgresql+psycopg_async://")
+    .replace("postgresql://", "postgresql+psycopg_async://")
 )
 
 
@@ -150,6 +149,7 @@ def sync_client() -> TestClient:
 
 # ── Reusable test data factories ──────────────────────────────────────────────
 
+
 def make_org_id() -> uuid.UUID:
     return uuid.uuid4()
 
@@ -159,6 +159,7 @@ def make_user_id() -> uuid.UUID:
 
 
 # ── Celery task mock — prevents broker connection attempts in all tests ────────
+
 
 @pytest.fixture(autouse=True)
 def _mock_celery_dispatch():

@@ -14,7 +14,11 @@ async def _full_setup(async_client: AsyncClient, db_session: AsyncSession) -> tu
     """Create org + admin user + patients + feedback. Returns (org_id, token)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import CallFeedback, CommunityEngagement, Escalation
+    from api.app.models.hospital.call import (
+        CallFeedback,
+        CommunityEngagement,
+        Escalation,
+    )
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 
@@ -57,35 +61,43 @@ async def _full_setup(async_client: AsyncClient, db_session: AsyncSession) -> tu
     # Create call feedback
     now = datetime.now(tz=timezone.utc)
     for i, p in enumerate(patients):
-        db_session.add(CallFeedback(
-            id=uuid.uuid4(),
-            organization_id=org.id,
-            patient_id=p.id,
-            call_status="connected" if i < 2 else "not_connected",
-            call_outcome="positive" if i == 0 else "no_feedback",
-            call_duration=120,
-            called_at=now - timedelta(days=i),
-        ))
+        db_session.add(
+            CallFeedback(
+                id=uuid.uuid4(),
+                organization_id=org.id,
+                patient_id=p.id,
+                call_status="connected" if i < 2 else "not_connected",
+                call_outcome="positive" if i == 0 else "no_feedback",
+                call_duration=120,
+                called_at=now - timedelta(days=i),
+            )
+        )
     await db_session.flush()
 
     # Create escalation
-    db_session.add(Escalation(
-        id=uuid.uuid4(),
-        organization_id=org.id,
-        patient_id=patients[0].id,
-        issue_description="Test escalation",
-        status="pending",
-        department="General",
-    ))
+    db_session.add(
+        Escalation(
+            id=uuid.uuid4(),
+            organization_id=org.id,
+            patient_id=patients[0].id,
+            issue_description="Test escalation",
+            status="pending",
+            department="General",
+        )
+    )
     await db_session.flush()
 
-    login = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    login = await async_client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
     token = login.json()["token"]
     return org.id, token
 
 
 class TestOutboundKPI:
-    async def test_kpi_summary_returns_four_cards(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_kpi_summary_returns_four_cards(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/kpi",
@@ -98,7 +110,9 @@ class TestOutboundKPI:
         assert "community_conversion" in body
         assert "escalated_issues" in body
 
-    async def test_kpi_cards_have_required_fields(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_kpi_cards_have_required_fields(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/kpi",
@@ -112,7 +126,9 @@ class TestOutboundKPI:
         assert "icon" in card
         assert "color" in card
 
-    async def test_kpi_date_range_filter(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_kpi_date_range_filter(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/kpi?start_date=2024-01-01&end_date=2024-12-31",
@@ -122,7 +138,9 @@ class TestOutboundKPI:
 
 
 class TestAdminDashboard:
-    async def test_admin_dashboard_returns_counts(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_admin_dashboard_returns_counts(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/admin",
@@ -138,7 +156,9 @@ class TestAdminDashboard:
 
 
 class TestPatientEngagement:
-    async def test_patient_engagement_structure(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_patient_engagement_structure(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/patient-engagement",
@@ -152,7 +172,9 @@ class TestPatientEngagement:
         assert isinstance(body["contactsData"], list)
         assert isinstance(body["callAnswerData"], list)
 
-    async def test_call_answer_data_has_name_and_value(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_call_answer_data_has_name_and_value(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/patient-engagement",
@@ -164,7 +186,9 @@ class TestPatientEngagement:
 
 
 class TestCommunityEngagement:
-    async def test_community_engagement_structure(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_community_engagement_structure(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/community-engagement",
@@ -180,7 +204,9 @@ class TestCommunityEngagement:
 
 
 class TestEscalationEngagement:
-    async def test_escalation_engagement_structure(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_escalation_engagement_structure(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, token = await _full_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/dashboard/escalation-engagement",
@@ -195,13 +221,18 @@ class TestEscalationEngagement:
 
 
 class TestCallFeedbackPost:
-    async def test_post_call_feedback(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_post_call_feedback(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import Patient
+
         org_id, token = await _full_setup(async_client, db_session)
 
         p = Patient(
-            id=uuid.uuid4(), organization_id=org_id,
-            patient_name="Feedback Patient", mobile_no="+919500000001",
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            patient_name="Feedback Patient",
+            mobile_no="+919500000001",
         )
         db_session.add(p)
         await db_session.flush()
@@ -220,20 +251,27 @@ class TestCallFeedbackPost:
         assert resp.status_code == 200
         assert resp.json()["error"] == 0
 
-    async def test_post_feedback_wrong_org_patient_fails(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_post_feedback_wrong_org_patient_fails(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import Patient
         from api.app.models.organization import Organization
 
         _, token = await _full_setup(async_client, db_session)
 
         other_org = Organization(
-            id=uuid.uuid4(), name="Other Org", slug=f"other3-{uuid.uuid4().hex[:8]}", type="hospital"
+            id=uuid.uuid4(),
+            name="Other Org",
+            slug=f"other3-{uuid.uuid4().hex[:8]}",
+            type="hospital",
         )
         db_session.add(other_org)
         await db_session.flush()
         other_patient = Patient(
-            id=uuid.uuid4(), organization_id=other_org.id,
-            patient_name="Other", mobile_no="+919600000001",
+            id=uuid.uuid4(),
+            organization_id=other_org.id,
+            patient_name="Other",
+            mobile_no="+919600000001",
         )
         db_session.add(other_patient)
         await db_session.flush()

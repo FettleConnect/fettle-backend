@@ -16,24 +16,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 pytestmark = pytest.mark.integration
 
 
-async def _setup_staff_with_patients(async_client: AsyncClient, db_session: AsyncSession) -> tuple:
+async def _setup_staff_with_patients(
+    async_client: AsyncClient, db_session: AsyncSession
+) -> tuple:
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import CallFeedback, CommunityEngagement, Escalation
+    from api.app.models.hospital.call import (
+        CallFeedback,
+        CommunityEngagement,
+        Escalation,
+    )
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 
     org = Organization(
-        id=uuid.uuid4(), name=f"E2E Staff Hospital {uuid.uuid4().hex[:6]}",
-        slug=f"e2e-staff-{uuid.uuid4().hex[:8]}", type="hospital",
+        id=uuid.uuid4(),
+        name=f"E2E Staff Hospital {uuid.uuid4().hex[:6]}",
+        slug=f"e2e-staff-{uuid.uuid4().hex[:8]}",
+        type="hospital",
     )
     db_session.add(org)
     await db_session.flush()
 
     email = f"staff_{uuid.uuid4().hex[:8]}@e2ehospital.com"
     staff = User(
-        id=uuid.uuid4(), organization_id=org.id, email=email,
-        password_hash=hash_password("StaffPass123!"), name="E2E Staff",
+        id=uuid.uuid4(),
+        organization_id=org.id,
+        email=email,
+        password_hash=hash_password("StaffPass123!"),
+        name="E2E Staff",
         role="hospital_user",
         perm_patient_engagement=True,
         perm_calllog_engagement=True,
@@ -47,21 +58,27 @@ async def _setup_staff_with_patients(async_client: AsyncClient, db_session: Asyn
     patients = []
     for i in range(4):
         p = Patient(
-            id=uuid.uuid4(), organization_id=org.id,
+            id=uuid.uuid4(),
+            organization_id=org.id,
             patient_name=f"Staff Flow Patient {i}",
-            mobile_no=f"+9180100{i:05d}", department="Orthopedics" if i % 2 == 0 else "Cardiology",
+            mobile_no=f"+9180100{i:05d}",
+            department="Orthopedics" if i % 2 == 0 else "Cardiology",
         )
         db_session.add(p)
         patients.append(p)
     await db_session.flush()
 
-    resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": "StaffPass123!"})
+    resp = await async_client.post(
+        "/api/v1/auth/login", json={"email": email, "password": "StaffPass123!"}
+    )
     token = resp.json()["token"]
     return org.id, token, patients
 
 
 class TestHospitalStaffFlow:
-    async def test_complete_staff_workflow(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_complete_staff_workflow(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         """
         Full staff workflow:
         1. Login → verify token with correct permissions
@@ -74,7 +91,9 @@ class TestHospitalStaffFlow:
         8. Export patient Excel report
         9. Confirm staff CANNOT see other org patients
         """
-        org_id, token, patients = await _setup_staff_with_patients(async_client, db_session)
+        org_id, token, patients = await _setup_staff_with_patients(
+            async_client, db_session
+        )
         auth = {"Authorization": f"Bearer {token}"}
         patient = patients[0]
 
@@ -91,38 +110,52 @@ class TestHospitalStaffFlow:
         assert r.json()["count"] == 4
 
         # ── 3. Patient list with department filter ────────────────────────────
-        r = await async_client.get("/api/v1/patients/?department=Cardiology", headers=auth)
+        r = await async_client.get(
+            "/api/v1/patients/?department=Cardiology", headers=auth
+        )
         assert r.status_code == 200
         for p in r.json()["data"]:
             assert p["department"] == "Cardiology"
 
         # ── 4. Log call feedback ─────────────────────────────────────────────
-        r = await async_client.post("/api/v1/calls/feedback", headers=auth, json={
-            "patient_id": str(patient.id),
-            "call_status": "connected",
-            "call_outcome": "positive",
-            "remarks": "Patient confirmed appointment",
-            "revisit_encouraged": True,
-            "call_duration": 180,
-            "called_by": "E2E Staff",
-        })
+        r = await async_client.post(
+            "/api/v1/calls/feedback",
+            headers=auth,
+            json={
+                "patient_id": str(patient.id),
+                "call_status": "connected",
+                "call_outcome": "positive",
+                "remarks": "Patient confirmed appointment",
+                "revisit_encouraged": True,
+                "call_duration": 180,
+                "called_by": "E2E Staff",
+            },
+        )
         assert r.status_code == 200
         assert r.json()["error"] == 0
 
         # ── 5. Log escalation ────────────────────────────────────────────────
-        r = await async_client.post("/api/v1/escalations/feedback", headers=auth, json={
-            "patient_id": str(patient.id),
-            "issue_description": "Patient needs urgent attention for chest pain",
-            "department": "Cardiology",
-        })
+        r = await async_client.post(
+            "/api/v1/escalations/feedback",
+            headers=auth,
+            json={
+                "patient_id": str(patient.id),
+                "issue_description": "Patient needs urgent attention for chest pain",
+                "department": "Cardiology",
+            },
+        )
         assert r.status_code == 200
 
         # ── 6. Log community engagement ──────────────────────────────────────
-        r = await async_client.post("/api/v1/calls/community", headers=auth, json={
-            "patient_id": str(patient.id),
-            "engagement_type": "post",
-            "department": "Cardiology",
-        })
+        r = await async_client.post(
+            "/api/v1/calls/community",
+            headers=auth,
+            json={
+                "patient_id": str(patient.id),
+                "engagement_type": "post",
+                "department": "Cardiology",
+            },
+        )
         assert r.status_code == 200
 
         # ── 7. View escalation management list ───────────────────────────────
@@ -136,11 +169,15 @@ class TestHospitalStaffFlow:
 
         # ── 8. Resolve escalation ────────────────────────────────────────────
         esc_id = esc_data[0]["id"]
-        r = await async_client.post("/api/v1/escalations/update", headers=auth, json={
-            "id": str(esc_id),
-            "status": "resolved",
-            "resolution_notes": "Patient advised to visit ER",
-        })
+        r = await async_client.post(
+            "/api/v1/escalations/update",
+            headers=auth,
+            json={
+                "id": str(esc_id),
+                "status": "resolved",
+                "resolution_notes": "Patient advised to visit ER",
+            },
+        )
         assert r.status_code == 200
 
         # ── 9. Dashboard — patient engagement chart ──────────────────────────
@@ -154,14 +191,18 @@ class TestHospitalStaffFlow:
         assert abs(sum(pcts) - 100.0) < 0.1  # Must sum to ~100%
 
         # ── 10. Community engagement dashboard ───────────────────────────────
-        r = await async_client.get("/api/v1/dashboard/community-engagement", headers=auth)
+        r = await async_client.get(
+            "/api/v1/dashboard/community-engagement", headers=auth
+        )
         assert r.status_code == 200
         body = r.json()
         assert "communityGrowthData" in body
         assert "feedbackDistribution" in body
 
         # ── 11. Escalation engagement dashboard ──────────────────────────────
-        r = await async_client.get("/api/v1/dashboard/escalation-engagement", headers=auth)
+        r = await async_client.get(
+            "/api/v1/dashboard/escalation-engagement", headers=auth
+        )
         assert r.status_code == 200
         body = r.json()
         assert "departmentEscalationData" in body
@@ -202,31 +243,45 @@ class TestHospitalStaffFlow:
         assert "interactions" in body
         assert "revenue" in body
 
-    async def test_staff_call_history_for_patient(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
-        org_id, token, patients = await _setup_staff_with_patients(async_client, db_session)
+    async def test_staff_call_history_for_patient(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        org_id, token, patients = await _setup_staff_with_patients(
+            async_client, db_session
+        )
         auth = {"Authorization": f"Bearer {token}"}
         patient = patients[0]
 
         # Log some feedback first
-        await async_client.post("/api/v1/calls/feedback", headers=auth, json={
-            "patient_id": str(patient.id),
-            "call_status": "not_connected",
-            "call_outcome": "no_feedback",
-        })
+        await async_client.post(
+            "/api/v1/calls/feedback",
+            headers=auth,
+            json={
+                "patient_id": str(patient.id),
+                "call_status": "not_connected",
+                "call_outcome": "no_feedback",
+            },
+        )
 
-        r = await async_client.get(f"/api/v1/patients/{patient.id}/history", headers=auth)
+        r = await async_client.get(
+            f"/api/v1/patients/{patient.id}/history", headers=auth
+        )
         assert r.status_code == 200
         body = r.json()
         assert body["error"] == 0
         assert isinstance(body["history"], list)
 
-    async def test_staff_broadcast_text(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_staff_broadcast_text(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, token, _ = await _setup_staff_with_patients(async_client, db_session)
         auth = {"Authorization": f"Bearer {token}"}
 
-        r = await async_client.post("/api/v1/calls/broadcast", headers=auth, json={
-            "text": "Health tips from E2E Hospital"
-        })
+        r = await async_client.post(
+            "/api/v1/calls/broadcast",
+            headers=auth,
+            json={"text": "Health tips from E2E Hospital"},
+        )
         assert r.status_code == 200
         assert r.json()["error"] == 0
 

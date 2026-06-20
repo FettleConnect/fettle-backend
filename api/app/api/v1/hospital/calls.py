@@ -23,6 +23,7 @@ router = APIRouter(tags=["calls"])
 
 # ── Outbound dispatch ─────────────────────────────────────────────────────────
 
+
 @router.post("/calls/outbound")
 async def trigger_outbound(
     body: dict,
@@ -45,31 +46,44 @@ async def trigger_outbound(
     audience_type: str = body.get("audience_type", "all")
 
     # Fetch org name for metadata
-    org_name = await session.scalar(select(Organization.name).where(Organization.id == org_id)) or ""
+    org_name = (
+        await session.scalar(select(Organization.name).where(Organization.id == org_id))
+        or ""
+    )
 
     if is_individual and patient_ids:
         # Individual calls — queue immediately
-        patient_rows = (await session.execute(
-            select(Patient).where(
-                Patient.id.in_([uuid.UUID(pid) for pid in patient_ids]),
-                Patient.organization_id == org_id,
+        patient_rows = (
+            (
+                await session.execute(
+                    select(Patient).where(
+                        Patient.id.in_([uuid.UUID(pid) for pid in patient_ids]),
+                        Patient.organization_id == org_id,
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
 
         task_ids = []
         for p in patient_rows:
-            task = call_outbound_task.delay({
-                "organization_id": str(org_id),
-                "patient_id": str(p.id),
-                "campaign_id": None,
-                "prompt": body.get("purpose", ""),
-            })
+            task = call_outbound_task.delay(
+                {
+                    "organization_id": str(org_id),
+                    "patient_id": str(p.id),
+                    "campaign_id": None,
+                    "prompt": body.get("purpose", ""),
+                }
+            )
             task_ids.append(task.id)
 
         return {
             "error": 0,
             "msg": "Outbound call(s) queued",
-            "patients": [{"id": str(p.id), "name": p.patient_name} for p in patient_rows],
+            "patients": [
+                {"id": str(p.id), "name": p.patient_name} for p in patient_rows
+            ],
             "task_ids": task_ids,
         }
 
@@ -79,7 +93,10 @@ async def trigger_outbound(
 
     if campaign_id_str:
         campaign_obj = await session.scalar(
-            select(Campaign).where(Campaign.id == uuid.UUID(campaign_id_str), Campaign.organization_id == org_id)
+            select(Campaign).where(
+                Campaign.id == uuid.UUID(campaign_id_str),
+                Campaign.organization_id == org_id,
+            )
         )
         if not campaign_obj:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -118,11 +135,13 @@ async def process_outbound(
 ) -> dict:
     """Trigger Celery task to pull S3 transcript and process a completed outbound call."""
     from api.app.worker.tasks import process_outbound_calls
+
     process_outbound_calls.delay(body)
     return {"error": 0, "msg": "Processing queued"}
 
 
 # ── Inbound list ──────────────────────────────────────────────────────────────
+
 
 @router.get("/inbound/")
 async def list_inbound_calls(
@@ -166,6 +185,7 @@ async def list_inbound_calls(
 
 # ── Excel export ──────────────────────────────────────────────────────────────
 
+
 @router.get("/calls/export")
 async def export_outbound_excel(
     current_user: User = Depends(get_current_user),
@@ -173,18 +193,20 @@ async def export_outbound_excel(
 ) -> Response:
     org_id = current_user.organization_id
 
-    rows = (await session.execute(
-        select(
-            Patient.patient_name,
-            Patient.mobile_no,
-            OutboundCall.calling_process,
-            OutboundCall.ended_reason,
-            OutboundCall.started_at,
+    rows = (
+        await session.execute(
+            select(
+                Patient.patient_name,
+                Patient.mobile_no,
+                OutboundCall.calling_process,
+                OutboundCall.ended_reason,
+                OutboundCall.started_at,
+            )
+            .join(Patient, OutboundCall.patient_id == Patient.id)
+            .where(OutboundCall.organization_id == org_id)
+            .order_by(OutboundCall.started_at.desc())
         )
-        .join(Patient, OutboundCall.patient_id == Patient.id)
-        .where(OutboundCall.organization_id == org_id)
-        .order_by(OutboundCall.started_at.desc())
-    )).all()
+    ).all()
 
     data = [
         {
@@ -192,7 +214,9 @@ async def export_outbound_excel(
             "Mobile No": r.mobile_no,
             "Status": r.calling_process,
             "Reason": r.ended_reason or "",
-            "Call Date": r.started_at.strftime("%Y-%m-%d %H:%M:%S") if r.started_at else "N/A",
+            "Call Date": (
+                r.started_at.strftime("%Y-%m-%d %H:%M:%S") if r.started_at else "N/A"
+            ),
         }
         for r in rows
     ]

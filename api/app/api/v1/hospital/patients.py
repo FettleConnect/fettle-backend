@@ -39,12 +39,18 @@ _GRAY = "#6C757D"
 
 @router.get("/", response_model=PatientListResponse)
 async def list_patients(
-    call_status: str = Query(default="", description="Comma-separated: connected,not_connected,in_progress"),
+    call_status: str = Query(
+        default="", description="Comma-separated: connected,not_connected,in_progress"
+    ),
     start_date: Optional[date] = Query(default=None),
     end_date: Optional[date] = Query(default=None),
     department: Optional[str] = Query(default=None),
-    limit: Optional[str] = Query(default=None, description="Integer or 'all' or 'latest'"),
-    patient_ids: Optional[str] = Query(default=None, description="Comma-separated UUIDs"),
+    limit: Optional[str] = Query(
+        default=None, description="Integer or 'all' or 'latest'"
+    ),
+    patient_ids: Optional[str] = Query(
+        default=None, description="Comma-separated UUIDs"
+    ),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> PatientListResponse:
@@ -64,9 +70,7 @@ async def list_patients(
     )
 
     org_name_col = (
-        select(Organization.name)
-        .where(Organization.id == org_id)
-        .scalar_subquery()
+        select(Organization.name).where(Organization.id == org_id).scalar_subquery()
     )
 
     calling_process_expr = func.coalesce(
@@ -98,10 +102,13 @@ async def list_patients(
     effective_limit: int | None = None
     if limit and limit.strip().lower() == "latest":
         max_upload = await session.scalar(
-            select(func.max(Patient.uploaded_at)).where(Patient.organization_id == org_id)
+            select(func.max(Patient.uploaded_at)).where(
+                Patient.organization_id == org_id
+            )
         )
         if max_upload:
             from datetime import timedelta
+
             q = q.where(Patient.uploaded_at >= max_upload - timedelta(minutes=5))
     elif limit and limit.strip().lower() not in ("", "all"):
         try:
@@ -136,17 +143,19 @@ async def list_patients(
         if status_filter and cp.lower() not in status_filter:
             continue
 
-        data.append(PatientOut(
-            id=row.id,
-            patient_name=row.patient_name,
-            mobile_no=row.mobile_no,
-            department=row.department,
-            age=row.age,
-            hospital_name=row.hospital_name or "",
-            whatsapp_link=f"https://web.whatsapp.com/send?phone={row.mobile_no}",
-            calling_progress=cp,
-            color=_STATUS_COLORS.get(cp, _GRAY),
-        ))
+        data.append(
+            PatientOut(
+                id=row.id,
+                patient_name=row.patient_name,
+                mobile_no=row.mobile_no,
+                department=row.department,
+                age=row.age,
+                hospital_name=row.hospital_name or "",
+                whatsapp_link=f"https://web.whatsapp.com/send?phone={row.mobile_no}",
+                calling_progress=cp,
+                color=_STATUS_COLORS.get(cp, _GRAY),
+            )
+        )
 
     return PatientListResponse(data=data, count=len(data))
 
@@ -156,22 +165,32 @@ async def list_upload_logs(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> UploadLogsResponse:
-    rows = (await session.execute(
-        select(HospitalUploadLog)
-        .where(HospitalUploadLog.organization_id == current_user.organization_id)
-        .order_by(HospitalUploadLog.uploaded_at.desc())
-    )).scalars().all()
-
-    return UploadLogsResponse(data=[
-        UploadLogOut(
-            id=str(r.id),
-            file_names=r.file_names,
-            status=r.status,
-            uploaded_at=r.uploaded_at,
-            message=r.message,
+    rows = (
+        (
+            await session.execute(
+                select(HospitalUploadLog)
+                .where(
+                    HospitalUploadLog.organization_id == current_user.organization_id
+                )
+                .order_by(HospitalUploadLog.uploaded_at.desc())
+            )
         )
-        for r in rows
-    ])
+        .scalars()
+        .all()
+    )
+
+    return UploadLogsResponse(
+        data=[
+            UploadLogOut(
+                id=str(r.id),
+                file_names=r.file_names,
+                status=r.status,
+                uploaded_at=r.uploaded_at,
+                message=r.message,
+            )
+            for r in rows
+        ]
+    )
 
 
 @router.get("/{patient_id}/history", response_model=PatientCallHistoryResponse)
@@ -187,50 +206,73 @@ async def patient_call_history(
         )
     )
     if patient is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
-
-    out_rows = (await session.execute(
-        select(OutboundCall)
-        .where(
-            OutboundCall.patient_id == patient_id,
-            OutboundCall.organization_id == current_user.organization_id,
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
-        .order_by(OutboundCall.started_at.desc())
-    )).scalars().all()
 
-    last_10 = patient.mobile_no[-10:] if len(patient.mobile_no) > 10 else patient.mobile_no
-    in_rows = (await session.execute(
-        select(InboundCall)
-        .where(
-            InboundCall.organization_id == current_user.organization_id,
-            InboundCall.from_phone_number.like(f"%{last_10}"),
+    out_rows = (
+        (
+            await session.execute(
+                select(OutboundCall)
+                .where(
+                    OutboundCall.patient_id == patient_id,
+                    OutboundCall.organization_id == current_user.organization_id,
+                )
+                .order_by(OutboundCall.started_at.desc())
+            )
         )
-        .order_by(InboundCall.started_at.desc())
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
+
+    last_10 = (
+        patient.mobile_no[-10:] if len(patient.mobile_no) > 10 else patient.mobile_no
+    )
+    in_rows = (
+        (
+            await session.execute(
+                select(InboundCall)
+                .where(
+                    InboundCall.organization_id == current_user.organization_id,
+                    InboundCall.from_phone_number.like(f"%{last_10}"),
+                )
+                .order_by(InboundCall.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     history: list[CallHistoryItem] = []
     for c in out_rows:
-        history.append(CallHistoryItem(
-            id=str(c.id),
-            type="outbound",
-            started_at=c.started_at,
-            status=c.calling_process,
-            transcript_link=get_presigned_url(c.message_s3_link),
-            audio_link=get_presigned_url(c.audio_s3_link),
-            summary="AI Outbound Summary available in transcript link",
-        ))
+        history.append(
+            CallHistoryItem(
+                id=str(c.id),
+                type="outbound",
+                started_at=c.started_at,
+                status=c.calling_process,
+                transcript_link=get_presigned_url(c.message_s3_link),
+                audio_link=get_presigned_url(c.audio_s3_link),
+                summary="AI Outbound Summary available in transcript link",
+            )
+        )
     for c in in_rows:
-        history.append(CallHistoryItem(
-            id=str(c.id),
-            type="inbound",
-            started_at=c.started_at,
-            status=c.calling_process,
-            transcript_link=get_presigned_url(c.message_s3_link),
-            audio_link=get_presigned_url(c.audio_s3_link),
-            summary="AI Inbound Summary available in transcript link",
-        ))
+        history.append(
+            CallHistoryItem(
+                id=str(c.id),
+                type="inbound",
+                started_at=c.started_at,
+                status=c.calling_process,
+                transcript_link=get_presigned_url(c.message_s3_link),
+                audio_link=get_presigned_url(c.audio_s3_link),
+                summary="AI Inbound Summary available in transcript link",
+            )
+        )
 
-    history.sort(key=lambda x: (x.started_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+    history.sort(
+        key=lambda x: (x.started_at or datetime.min.replace(tzinfo=timezone.utc)),
+        reverse=True,
+    )
     return PatientCallHistoryResponse(history=history)
 
 
@@ -313,11 +355,19 @@ async def upload_patients(
 
                 age_col = _get_col(list(df.columns), "age")
                 p_age_raw = row.get(age_col) if age_col else None
-                p_age = int(p_age_raw) if p_age_raw is not None and pd.notnull(p_age_raw) else None
+                p_age = (
+                    int(p_age_raw)
+                    if p_age_raw is not None and pd.notnull(p_age_raw)
+                    else None
+                )
 
                 sno_col = _get_col(list(df.columns), "serial_no")
                 p_sno_raw = row.get(sno_col) if sno_col else None
-                p_sno = int(p_sno_raw) if p_sno_raw is not None and pd.notnull(p_sno_raw) else None
+                p_sno = (
+                    int(p_sno_raw)
+                    if p_sno_raw is not None and pd.notnull(p_sno_raw)
+                    else None
+                )
 
                 date_col = _get_col(list(df.columns), "date")
                 p_date = None

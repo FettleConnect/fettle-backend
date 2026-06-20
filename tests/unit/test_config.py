@@ -36,9 +36,15 @@ class TestSettings:
         from api.app.core.config import settings
 
         assert "psycopg_async" not in settings.sync_database_url
-        assert "psycopg" in settings.sync_database_url or "postgresql" in settings.sync_database_url
+        assert (
+            "psycopg" in settings.sync_database_url
+            or "postgresql" in settings.sync_database_url
+        )
 
     def test_test_database_url_has_test_suffix(self) -> None:
         from api.app.core.config import settings
 
-        assert "_test" in settings.test_database_url or "test" in settings.test_database_url
+        assert (
+            "_test" in settings.test_database_url
+            or "test" in settings.test_database_url
+        )

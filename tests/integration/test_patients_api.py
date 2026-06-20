@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 pytestmark = pytest.mark.integration
 
 
-async def _setup_org_and_token(async_client: AsyncClient, db_session: AsyncSession) -> tuple:
+async def _setup_org_and_token(
+    async_client: AsyncClient, db_session: AsyncSession
+) -> tuple:
     """Returns (org_id, token, user_id)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
@@ -41,13 +43,18 @@ async def _setup_org_and_token(async_client: AsyncClient, db_session: AsyncSessi
     db_session.add(user)
     await db_session.flush()
 
-    login = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    login = await async_client.post(
+        "/api/v1/auth/login", json={"email": email, "password": password}
+    )
     token = login.json()["token"]
     return org.id, token, user.id
 
 
-async def _seed_patients(db_session: AsyncSession, org_id: uuid.UUID, count: int = 5) -> list:
+async def _seed_patients(
+    db_session: AsyncSession, org_id: uuid.UUID, count: int = 5
+) -> list:
     from api.app.models.hospital.patient import Patient
+
     patients = []
     for i in range(count):
         p = Patient(
@@ -65,7 +72,9 @@ async def _seed_patients(db_session: AsyncSession, org_id: uuid.UUID, count: int
 
 
 class TestFetchPatients:
-    async def test_list_patients_authenticated(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_list_patients_authenticated(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
         await _seed_patients(db_session, org_id, 3)
         resp = await async_client.get(
@@ -78,11 +87,15 @@ class TestFetchPatients:
         assert "data" in body
         assert body["count"] >= 3
 
-    async def test_list_patients_unauthenticated(self, async_client: AsyncClient) -> None:
+    async def test_list_patients_unauthenticated(
+        self, async_client: AsyncClient
+    ) -> None:
         resp = await async_client.get("/api/v1/patients/")
         assert resp.status_code in (401, 403)
 
-    async def test_list_patients_scoped_to_org(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_list_patients_scoped_to_org(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import Patient
         from api.app.models.organization import Organization
         from api.app.core.security import hash_password
@@ -101,12 +114,14 @@ class TestFetchPatients:
 
         # Seed patients in org2
         for i in range(3):
-            db_session.add(Patient(
-                id=uuid.uuid4(),
-                organization_id=org2.id,
-                patient_name=f"Other Patient {i}",
-                mobile_no=f"+9198765{i:05d}",
-            ))
+            db_session.add(
+                Patient(
+                    id=uuid.uuid4(),
+                    organization_id=org2.id,
+                    patient_name=f"Other Patient {i}",
+                    mobile_no=f"+9198765{i:05d}",
+                )
+            )
         await db_session.flush()
 
         # Seed patients in org1
@@ -121,18 +136,30 @@ class TestFetchPatients:
         # Should only see org1's 2 patients, not org2's 3
         assert body["count"] == 2
 
-    async def test_list_patients_dept_filter(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_list_patients_dept_filter(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import Patient
 
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
-        db_session.add(Patient(
-            id=uuid.uuid4(), organization_id=org_id,
-            patient_name="Ortho Patient", mobile_no="+919111111111", department="Orthopedics",
-        ))
-        db_session.add(Patient(
-            id=uuid.uuid4(), organization_id=org_id,
-            patient_name="Cardio Patient", mobile_no="+919222222222", department="Cardiology",
-        ))
+        db_session.add(
+            Patient(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                patient_name="Ortho Patient",
+                mobile_no="+919111111111",
+                department="Orthopedics",
+            )
+        )
+        db_session.add(
+            Patient(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                patient_name="Cardio Patient",
+                mobile_no="+919222222222",
+                department="Cardiology",
+            )
+        )
         await db_session.flush()
 
         resp = await async_client.get(
@@ -143,7 +170,9 @@ class TestFetchPatients:
         body = resp.json()
         assert all(p["department"] == "Orthopedics" for p in body["data"])
 
-    async def test_list_patients_limit(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_list_patients_limit(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
         await _seed_patients(db_session, org_id, 10)
         resp = await async_client.get(
@@ -156,7 +185,9 @@ class TestFetchPatients:
 
 
 class TestPatientCallHistory:
-    async def test_call_history_returns_empty_for_new_patient(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_call_history_returns_empty_for_new_patient(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
         patients = await _seed_patients(db_session, org_id, 1)
         resp = await async_client.get(
@@ -168,19 +199,26 @@ class TestPatientCallHistory:
         assert body["error"] == 0
         assert isinstance(body["history"], list)
 
-    async def test_call_history_wrong_org_returns_404(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_call_history_wrong_org_returns_404(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import Patient
         from api.app.models.organization import Organization
 
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
         other_org = Organization(
-            id=uuid.uuid4(), name="Other", slug=f"other2-{uuid.uuid4().hex[:8]}", type="hospital"
+            id=uuid.uuid4(),
+            name="Other",
+            slug=f"other2-{uuid.uuid4().hex[:8]}",
+            type="hospital",
         )
         db_session.add(other_org)
         await db_session.flush()
         other_patient = Patient(
-            id=uuid.uuid4(), organization_id=other_org.id,
-            patient_name="Other", mobile_no="+910000099999",
+            id=uuid.uuid4(),
+            organization_id=other_org.id,
+            patient_name="Other",
+            mobile_no="+910000099999",
         )
         db_session.add(other_patient)
         await db_session.flush()
@@ -193,13 +231,21 @@ class TestPatientCallHistory:
 
 
 class TestUploadLogs:
-    async def test_upload_logs_returns_list(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_upload_logs_returns_list(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         from api.app.models.hospital.patient import HospitalUploadLog
+
         org_id, token, _ = await _setup_org_and_token(async_client, db_session)
-        db_session.add(HospitalUploadLog(
-            id=uuid.uuid4(), organization_id=org_id,
-            file_names=["test.csv"], status="SUCCESS", message="3 records",
-        ))
+        db_session.add(
+            HospitalUploadLog(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                file_names=["test.csv"],
+                status="SUCCESS",
+                message="3 records",
+            )
+        )
         await db_session.flush()
         resp = await async_client.get(
             "/api/v1/patients/upload-logs",

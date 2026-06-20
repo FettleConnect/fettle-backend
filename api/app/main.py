@@ -47,8 +47,12 @@ from api.app.api.v1.auth import router as auth_router  # noqa: E402
 from api.app.api.v1.tenant import router as tenant_router  # noqa: E402
 from api.app.api.v1.hospital.patients import router as patients_router  # noqa: E402
 from api.app.api.v1.hospital.feedback import router as feedback_router  # noqa: E402
-from api.app.api.v1.hospital.outbound_dashboard import router as outbound_dash_router  # noqa: E402
-from api.app.api.v1.hospital.inbound_dashboard import router as inbound_dash_router  # noqa: E402
+from api.app.api.v1.hospital.outbound_dashboard import (
+    router as outbound_dash_router,
+)  # noqa: E402
+from api.app.api.v1.hospital.inbound_dashboard import (
+    router as inbound_dash_router,
+)  # noqa: E402
 from api.app.api.v1.hospital.webhooks import router as webhooks_router  # noqa: E402
 from api.app.api.v1.hospital.calls import router as calls_router  # noqa: E402
 from api.app.api.v1.hospital.medivoice import router as medivoice_router  # noqa: E402

@@ -22,7 +22,9 @@ def _verify_internal_secret(request: Request) -> None:
     expected = os.environ.get("INTERNAL_API_SHARED_SECRET", "")
     provided = request.headers.get("X-Internal-API-Secret", "")
     if not expected or provided != expected:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+        )
 
 
 @router.get("/branding", response_model=BrandingResponse)
@@ -63,13 +65,19 @@ async def get_doctor_schedule(
     """
     _verify_internal_secret(request)
 
-    doctors = (await session.execute(
-        select(User).where(
-            User.organization_id == organization_id,
-            User.role == "doctor",
-            User.is_active.is_(True),
+    doctors = (
+        (
+            await session.execute(
+                select(User).where(
+                    User.organization_id == organization_id,
+                    User.role == "doctor",
+                    User.is_active.is_(True),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return [
         {
@@ -92,9 +100,17 @@ async def list_hospitals(
     if current_user.role not in ("superadmin", "hospital_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
-    orgs = (await session.execute(
-        select(Organization).where(Organization.type == "hospital", Organization.is_active.is_(True))
-    )).scalars().all()
+    orgs = (
+        (
+            await session.execute(
+                select(Organization).where(
+                    Organization.type == "hospital", Organization.is_active.is_(True)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "error": 0,
