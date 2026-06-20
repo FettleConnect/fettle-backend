@@ -16,7 +16,8 @@ if sys.platform == "win32":
 
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
 
 # ── Set required env vars BEFORE any app imports ──────────────────────────────
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")
@@ -31,10 +32,10 @@ os.environ.setdefault("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
 
 from unittest.mock import MagicMock, patch
 
-from api.app.db.base import Base  # noqa: E402 — must come after env setup
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
-from api.app.main import app  # noqa: E402
+from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
+from api.app.main import app  # noqa: E402
 
 # ── Test database engine ──────────────────────────────────────────────────────
 
@@ -48,8 +49,9 @@ TEST_DB_URL = (
 def _check_postgres_available() -> bool:
     """Returns True if PostgreSQL is reachable at the test URL."""
     try:
-        import psycopg
         import re
+
+        import psycopg
 
         sync_url = TEST_DB_URL.replace("postgresql+psycopg_async://", "")
         m = re.match(r"(\w+):([^@]*)@([^:/]+):?(\d+)?/(\w+)", sync_url)

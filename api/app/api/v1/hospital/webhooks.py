@@ -22,10 +22,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends
 
 from api.app.db.session import get_async_session
 from api.app.models.hospital.call import InboundCall, OutboundCall
@@ -84,7 +83,8 @@ async def _handle_room_finished(room_name: str, session: AsyncSession) -> None:
     except Exception as exc:
         logger.warning("Redis decrement failed: %s", exc)
 
-    from api.app.worker.tasks import process_inbound_calls, process_outbound_calls
+    from api.app.worker.tasks import (process_inbound_calls,
+                                      process_outbound_calls)
 
     if room_name.startswith("inbound_"):
         process_inbound_calls.delay({"vapi_id": room_name})

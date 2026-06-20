@@ -1,45 +1,29 @@
 from __future__ import annotations
 
 from api.app.models.auth import User
-from api.app.models.corporate.booking import (
-    ActivityBooking,
-    SessionBooking,
-    TherapistBooking,
-)
-from api.app.models.corporate.social import (
-    Comment,
-    CommentLike,
-    Notification,
-    Post,
-    PostLike,
-    SupportTicket,
-    UserSavedPost,
-)
-from api.app.models.corporate.wellness import (
-    ActivityRequest,
-    BodyComposition,
-    OutdoorActivity,
-    Package,
-    SessionRequest,
-    Therapist,
-    WellnessSession,
-    WellnessVideo,
-)
-from api.app.models.hospital.call import (
-    CallFeedback,
-    CommunityEngagement,
-    Escalation,
-    InboundCall,
-    InboundCommunityEngagement,
-    InboundEscalation,
-    InboundFeedback,
-    OutboundCall,
-)
+from api.app.models.corporate.booking import (ActivityBooking, SessionBooking,
+                                              TherapistBooking)
+from api.app.models.corporate.social import (Comment, CommentLike,
+                                             Notification, Post, PostLike,
+                                             SupportTicket, UserSavedPost)
+from api.app.models.corporate.wellness import (ActivityRequest,
+                                               BodyComposition,
+                                               OutdoorActivity, Package,
+                                               SessionRequest, Therapist,
+                                               WellnessSession, WellnessVideo)
+from api.app.models.hospital.call import (CallFeedback, CommunityEngagement,
+                                          Escalation, InboundCall,
+                                          InboundCommunityEngagement,
+                                          InboundEscalation, InboundFeedback,
+                                          OutboundCall)
 from api.app.models.hospital.campaign import Campaign
-from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
-from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
+from api.app.models.hospital.dermatology import (DermatologyPatient,
+                                                 DermatologyThread)
+from api.app.models.hospital.medivoice import (MediVoiceSession,
+                                               MediVoiceTranscription)
 from api.app.models.hospital.patient import HospitalUploadLog, Patient
-from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
+from api.app.models.organization import (CorporateConfig, HospitalConfig,
+                                         Organization)
 from api.app.models.shared import GlobalConfig
 
 __all__ = [

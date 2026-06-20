@@ -268,10 +268,11 @@ class TestDoctorScheduleEndpoint:
     async def test_doctor_schedule_with_internal_secret(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
+        import os
+
+        from api.app.core.security import hash_password
         from api.app.models.auth import User
         from api.app.models.organization import Organization
-        from api.app.core.security import hash_password
-        import os
 
         org = Organization(
             id=uuid.uuid4(),

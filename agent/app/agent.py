@@ -18,22 +18,12 @@ import random
 from typing import Any
 
 import httpx
-
 from dotenv import load_dotenv
 from livekit import api, rtc
-from livekit.agents import (
-    Agent,
-    AgentServer,
-    AgentSession,
-    InterruptionOptions,
-    JobContext,
-    JobExecutorType,
-    JobProcess,
-    RunContext,
-    TurnHandlingOptions,
-    cli,
-    function_tool,
-)
+from livekit.agents import (Agent, AgentServer, AgentSession,
+                            InterruptionOptions, JobContext, JobExecutorType,
+                            JobProcess, RunContext, TurnHandlingOptions, cli,
+                            function_tool)
 from livekit.agents.beta.tools import EndCallTool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import cartesia, openai, silero, soniox
@@ -639,7 +629,8 @@ async def infrastructure_guard() -> None:
                 if not vobiz_did:
                     continue
 
-            from api.app.services.livekit import ensure_infrastructure as _ensure
+            from api.app.services.livekit import \
+                ensure_infrastructure as _ensure
 
             await _ensure(
                 organization_id=org_id, hospital_name=name, vobiz_did=vobiz_did

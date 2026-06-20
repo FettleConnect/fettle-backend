@@ -237,7 +237,8 @@ class TestPatientChatbotFlow:
         org_id = await _setup_org(db_session)
 
         # Simulate a Google credential token (base64 encoded fake payload)
-        import base64, json
+        import base64
+        import json
 
         payload = {
             "email": f"google_{uuid.uuid4().hex[:8]}@gmail.com",

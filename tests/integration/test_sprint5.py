@@ -80,8 +80,9 @@ class TestAgentEscalation:
     async def test_escalation_by_phone(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        from api.app.models.hospital.call import Escalation
         from sqlalchemy import select
+
+        from api.app.models.hospital.call import Escalation
 
         org_id, _, patient_id = await _setup_hospital_with_patient(
             async_client, db_session

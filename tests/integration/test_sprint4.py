@@ -19,7 +19,8 @@ async def _hospital_setup(async_client: AsyncClient, db_session: AsyncSession) -
     """Returns (org_id, token, patient_id, doctor_id)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import CallFeedback, Escalation, InboundCall
+    from api.app.models.hospital.call import (CallFeedback, Escalation,
+                                              InboundCall)
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import HospitalConfig, Organization
 
@@ -398,6 +399,7 @@ class TestMediVoiceSync:
         org_id, token, _, doctor_id = await _hospital_setup(async_client, db_session)
         # Need doctor email for sync
         from sqlalchemy import select
+
         from api.app.models.auth import User
 
         doctor = await db_session.scalar(select(User).where(User.id == doctor_id))

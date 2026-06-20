@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
+from api.app.models.hospital.medivoice import (MediVoiceSession,
+                                               MediVoiceTranscription)
 from api.app.models.organization import Organization
 
 router = APIRouter(prefix="/medivoice", tags=["medivoice"])
@@ -156,10 +157,8 @@ async def notify_patient(
     """Trigger prescription WhatsApp notification and schedule revisit reminders."""
     await _get_session_or_404(session, session_id, current_user)
 
-    from api.app.worker.tasks import (
-        schedule_reminder_calls,
-        send_prescription_notifications,
-    )
+    from api.app.worker.tasks import (schedule_reminder_calls,
+                                      send_prescription_notifications)
 
     send_prescription_notifications.delay(str(session_id))
     schedule_reminder_calls.delay(str(session_id))
@@ -288,10 +287,8 @@ async def sync_session(
             )
         )
 
-    from api.app.worker.tasks import (
-        schedule_reminder_calls,
-        send_prescription_notifications,
-    )
+    from api.app.worker.tasks import (schedule_reminder_calls,
+                                      send_prescription_notifications)
 
     send_prescription_notifications.delay(str(mv.id))
     schedule_reminder_calls.delay(str(mv.id))
@@ -308,6 +305,7 @@ async def get_session_artifact(
 ) -> "Response":
     """Stream session artifact (transcript, audio) from S3."""
     from fastapi.responses import Response as _Response
+
     from api.app.services.s3 import get_presigned_url
 
     if artifact_type not in ("transcript", "audio", "pdf"):

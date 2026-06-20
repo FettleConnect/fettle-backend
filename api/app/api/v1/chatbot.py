@@ -19,28 +19,21 @@ import uuid
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile, status)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.config import settings
-from api.app.core.security import create_access_token, decode_token, TokenError
+from api.app.core.security import TokenError, create_access_token, decode_token
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
+from api.app.models.hospital.dermatology import (DermatologyPatient,
+                                                 DermatologyThread)
 from api.app.models.organization import Organization
 from api.app.services.llm import llm_client, openrouter_model
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
@@ -265,7 +258,7 @@ def _check_image_for_pii_ai(image_bytes: bytes) -> bool:
 
 async def _upload_image_to_s3(image_bytes: bytes, filename: str) -> str:
     """Upload image to S3 and return the presigned URL."""
-    from api.app.services.s3 import upload_bytes_to_s3, get_presigned_url
+    from api.app.services.s3 import get_presigned_url, upload_bytes_to_s3
 
     key = f"dermatology_images/{uuid.uuid4().hex}_{filename}"
     s3_url = await upload_bytes_to_s3(image_bytes, key, "image/jpeg")

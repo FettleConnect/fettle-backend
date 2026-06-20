@@ -219,9 +219,9 @@ class TestDoctorFlow:
         assert any(d["name"] == "Dr. E2E Specialist" for d in avail_data)
 
         # ── 13. Multi-tenant: session not accessible by other org doctor ──────
-        from api.app.models.organization import Organization
         from api.app.core.security import hash_password
         from api.app.models.auth import User as _User
+        from api.app.models.organization import Organization
 
         other_org = Organization(
             id=uuid.uuid4(),

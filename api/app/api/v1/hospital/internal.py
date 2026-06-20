@@ -14,12 +14,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.db.session import get_async_session
-from api.app.models.hospital.call import (
-    CallFeedback,
-    Escalation,
-    InboundCall,
-    OutboundCall,
-)
+from api.app.models.hospital.call import (CallFeedback, Escalation,
+                                          InboundCall, OutboundCall)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
 
@@ -340,6 +336,7 @@ async def agent_escalation(
 
     # Notify admin via WhatsApp (fire-and-forget)
     import asyncio
+
     from api.app.models.organization import Organization as Org
 
     org_name = (

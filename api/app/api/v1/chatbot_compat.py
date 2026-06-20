@@ -29,45 +29,28 @@ import base64
 import os
 import uuid
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-    File,
-    status,
-)
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
+                     UploadFile, status)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.app.api.v1.chatbot import (_DOCTOR_DRAFT_SYSTEM,
+                                    _GENERAL_EDUCATION_SYSTEM, _chat_with_ai,
+                                    _create_patient_token,
+                                    _generate_doctor_draft,
+                                    _get_current_doctor, _get_current_patient,
+                                    _get_or_create_thread, _process_images)
 from api.app.core.config import settings
-from api.app.core.security import (
-    TokenError,
-    create_access_token,
-    decode_token,
-    verify_password,
-)
+from api.app.core.security import (TokenError, create_access_token,
+                                   decode_token, verify_password)
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
+from api.app.models.hospital.dermatology import (DermatologyPatient,
+                                                 DermatologyThread)
 from api.app.models.organization import Organization
 from api.app.models.shared import GlobalConfig
-
-from api.app.api.v1.chatbot import (
-    _create_patient_token,
-    _get_current_patient,
-    _get_current_doctor,
-    _get_or_create_thread,
-    _chat_with_ai,
-    _generate_doctor_draft,
-    _process_images,
-    _GENERAL_EDUCATION_SYSTEM,
-    _DOCTOR_DRAFT_SYSTEM,
-)
 
 _GOOGLE_AUTH_ROUTER = APIRouter(tags=["auth-legacy"])
 _LEGACY_ROUTER = APIRouter(prefix="/api", tags=["legacy-compat"])
@@ -614,8 +597,9 @@ CONSULTATION_PRICE_USD = float(os.environ.get("CONSULTATION_PRICE_USD", "15.00")
 
 async def _get_paypal_access_token() -> str:
     """Get a PayPal OAuth2 access token."""
-    import httpx
     import base64
+
+    import httpx
 
     creds = base64.b64encode(
         f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()

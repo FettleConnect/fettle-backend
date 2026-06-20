@@ -21,11 +21,8 @@ async def _setup_staff_with_patients(
 ) -> tuple:
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import (
-        CallFeedback,
-        CommunityEngagement,
-        Escalation,
-    )
+    from api.app.models.hospital.call import (CallFeedback,
+                                              CommunityEngagement, Escalation)
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 

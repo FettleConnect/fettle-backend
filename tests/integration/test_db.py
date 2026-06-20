@@ -87,9 +87,9 @@ class TestOrganizationCRUD:
 
 class TestUserCRUD:
     async def test_create_user(self, db_session) -> None:
+        from api.app.core.security import hash_password
         from api.app.models.auth import User
         from api.app.models.organization import Organization
-        from api.app.core.security import hash_password
 
         org = Organization(
             id=uuid.uuid4(),
@@ -120,9 +120,9 @@ class TestUserCRUD:
     async def test_user_unique_per_org_email(self, db_session) -> None:
         from sqlalchemy.exc import IntegrityError
 
+        from api.app.core.security import hash_password
         from api.app.models.auth import User
         from api.app.models.organization import Organization
-        from api.app.core.security import hash_password
 
         org = Organization(
             id=uuid.uuid4(),

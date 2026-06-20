@@ -273,6 +273,7 @@ async def set_broadcast_text(
             select(Organization).where(Organization.id == current_user.organization_id)
         )
         import asyncio
+
         from api.app.services.whatsapp import send_whatsapp
 
         async def _broadcast():

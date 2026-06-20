@@ -9,7 +9,9 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone, time as dt_time
+from datetime import datetime
+from datetime import time as dt_time
+from datetime import timedelta, timezone
 
 import boto3
 from asgiref.sync import async_to_sync
@@ -17,7 +19,8 @@ from celery import shared_task
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on import)
+from api.app.celery_app import \
+    celery_app  # noqa: F401 (registers tasks on import)
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
 from api.app.services.llm import llm_client, openrouter_model
@@ -184,8 +187,8 @@ async def _get_patient(patient_id: str):
 
 
 async def _get_campaign_patients(campaign_id: str, organization_id: str) -> list:
-    from api.app.models.hospital.campaign import Campaign
     from api.app.models.hospital.call import OutboundCall
+    from api.app.models.hospital.campaign import Campaign
     from api.app.models.hospital.patient import Patient
 
     async with AsyncSessionLocal() as session:
@@ -348,12 +351,10 @@ async def _create_inbound_feedback(
     ai_result: dict,
     call_duration: float,
 ) -> None:
-    from api.app.models.hospital.call import (
-        InboundCall,
-        InboundCommunityEngagement,
-        InboundEscalation,
-        InboundFeedback,
-    )
+    from api.app.models.hospital.call import (InboundCall,
+                                              InboundCommunityEngagement,
+                                              InboundEscalation,
+                                              InboundFeedback)
 
     async with AsyncSessionLocal() as session:
         inbound_id = uuid.UUID(inbound_call_id)
@@ -774,8 +775,9 @@ def send_prescription_notifications(self, session_id: str):
             f"For follow-ups, contact: {doctor.mobile_number or org.name}."
         )
 
-        from api.app.services.whatsapp import send_whatsapp
         import asyncio
+
+        from api.app.services.whatsapp import send_whatsapp
 
         asyncio.get_event_loop().run_until_complete(
             send_whatsapp(
@@ -814,8 +816,9 @@ def reminder_task(self, session_id: str, reminder_type: str):
             f"Contact {doctor.mobile_number or org.name} for queries."
         )
 
-        from api.app.services.whatsapp import send_whatsapp
         import asyncio
+
+        from api.app.services.whatsapp import send_whatsapp
 
         asyncio.get_event_loop().run_until_complete(
             send_whatsapp(

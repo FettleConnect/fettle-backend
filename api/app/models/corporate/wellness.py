@@ -3,20 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    Table,
-    Text,
-    UniqueConstraint,
-    Uuid,
-    func,
-)
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, Numeric,
+                        String, Table, Text, UniqueConstraint, Uuid, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
