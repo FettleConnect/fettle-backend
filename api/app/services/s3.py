@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 
 import boto3
 from botocore.exceptions import ClientError

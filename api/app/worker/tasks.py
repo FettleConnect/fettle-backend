@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-"""
-Celery tasks — all DB access uses async SQLAlchemy via asgiref.sync.async_to_sync.
-No Django ORM anywhere.
-"""
-
 import json
 import logging
 import os
@@ -15,23 +10,17 @@ from datetime import timedelta, timezone
 
 import boto3
 from asgiref.sync import async_to_sync
-from celery import shared_task
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.celery_app import \
-    celery_app  # noqa: F401 (registers tasks on import)
+from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on import)
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
 from api.app.services.llm import llm_client, openrouter_model
+import redis as _redis_lib
 
 logger = logging.getLogger(__name__)
 
-# ── Shared OpenRouter client ─────────────────────────────────────────────────
 _openrouter_client = llm_client()
-
-# ── Redis for concurrency tracking ───────────────────────────────────────────
-import redis as _redis_lib
 
 _redis_host = (
     settings.redis_url.split("//")[-1].split(":")[0]
@@ -522,17 +511,6 @@ def call_outbound_task(self, payload: dict):
         # Create OutboundCall record before dispatch
         call_id = async_to_sync(_create_outbound_call)(
             org_id, patient_id, campaign_id, room_id
-        )
-
-        metadata = build_room_metadata(
-            organization_id=org_id,
-            hospital_name=org.name,
-            agent_prompt_prefix=cfg.agent_prompt_prefix if cfg else "",
-            call_type="outbound",
-            phone_number=phone,
-            patient_id=patient_id,
-            campaign_id=campaign_id,
-            prompt=prompt,
         )
 
         from api.app.services.livekit import dispatch_outbound_call_sync

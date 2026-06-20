@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 import pytest
 
@@ -20,7 +19,6 @@ class TestSettings:
 
     def test_jwt_secret_rejects_short_value(self) -> None:
         from pydantic import ValidationError
-        from pydantic_settings import BaseSettings
 
         from api.app.core.config import Settings
 

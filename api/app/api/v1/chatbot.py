@@ -1,32 +1,17 @@
 from __future__ import annotations
 
-"""
-Dermatology AI Chatbot API
-
-Patient flow (modes):
-  general_education   → patient asks general skin questions; AI responds freely
-  post_payment_intake → patient completes structured intake (no AI response, frontend drives)
-  dermatologist_review → intake submitted, awaiting doctor review (AI silent)
-  final_output        → doctor has responded; AI silent
-
-Protected by a patient-specific JWT (role=patient). The patient authenticates
-via POST /api/v1/chatbot/auth (email + organization_id).
-"""
-
 import base64
-import io
 import uuid
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile, status)
+from fastapi import (APIRouter, Depends, HTTPException, Request,
+                     status)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.core.config import settings
 from api.app.core.security import TokenError, create_access_token, decode_token
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
@@ -44,7 +29,6 @@ _bearer = HTTPBearer()
 
 def _create_patient_token(patient: DermatologyPatient, org_id: uuid.UUID) -> str:
     """Create a long-lived JWT (7 days) for a dermatology patient."""
-    from datetime import timedelta
 
     return create_access_token(
         user_id=patient.id,
@@ -509,7 +493,6 @@ async def send_chat_message(
             thread.conversation = conv
 
             # Background draft generation — non-blocking
-            import asyncio
 
             draft = _generate_doctor_draft(thread)
             if draft:

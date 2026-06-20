@@ -1,7 +1,4 @@
 from __future__ import annotations
-
-"""Unit tests for Celery task helpers — no DB or LiveKit needed."""
-
 import json
 
 

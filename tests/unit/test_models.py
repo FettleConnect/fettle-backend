@@ -1,14 +1,5 @@
 from __future__ import annotations
 
-"""
-Unit tests for SQLAlchemy model structure — no database required.
-These tests verify that models are correctly defined, importable,
-have the expected columns, and respect multi-tenant design constraints.
-"""
-
-import uuid
-
-
 class TestModelsImportable:
     def test_import_all_models(self) -> None:
         from api.app.models import (ActivityBooking,  # noqa: F401

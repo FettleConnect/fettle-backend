@@ -1,12 +1,5 @@
 from __future__ import annotations
 
-"""
-Hospital management endpoints:
-- Campaign CRUD (list, delete)
-- Doctor management (list, create, staff availability)
-- WhatsApp broadcast text (set/get)
-"""
-
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

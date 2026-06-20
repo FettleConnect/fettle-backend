@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-"""
-Sprint 4 integration tests: ROI, departments, campaigns, doctors,
-WhatsApp broadcast, MediVoice sync, artifacts, patient lookup.
-"""
-
 import uuid
 from datetime import datetime, timedelta, timezone
 

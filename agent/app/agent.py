@@ -1,25 +1,14 @@
 from __future__ import annotations
 
-"""
-Fettle Unified LiveKit Agent (Multi-Tenant)
-
-All tenant-specific values (hospital_name, agent_prompt_prefix, organization_id)
-are read from LiveKit Room Metadata — NEVER hardcoded.
-
-Doctor schedules are fetched from the FastAPI backend via the internal API.
-WhatsApp notifications go through the Vobiz API directly.
-"""
-
 import asyncio
 import json
 import logging
 import os
 import random
-from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from livekit import api, rtc
+from livekit import rtc
 from livekit.agents import (Agent, AgentServer, AgentSession,
                             InterruptionOptions, JobContext, JobExecutorType,
                             JobProcess, RunContext, TurnHandlingOptions, cli,
@@ -597,14 +586,8 @@ async def infrastructure_guard() -> None:
     except Exception as exc:
         logger.error("Guard: failed to fetch hospitals: %s", exc)
         return
-
-    livekit_url = (
-        os.environ.get("LIVEKIT_URL_INTERNAL", "http://livekit-server:7880")
-        if os.path.exists("/.dockerenv")
-        else os.environ.get("LIVEKIT_URL", "http://127.0.0.1:7880")
-    )
+    
     api_key = os.environ.get("LIVEKIT_API_KEY", "")
-    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
 
     if not api_key:
         logger.warning("Guard skipped: LIVEKIT_API_KEY not set")

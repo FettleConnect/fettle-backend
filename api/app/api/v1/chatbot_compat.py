@@ -1,48 +1,21 @@
 from __future__ import annotations
 
-"""
-Legacy-path compatibility layer for the dermatology chatbot.
-
-The frontend (fettle_oss_frontend) was built against the Django backend and
-calls these paths directly. Rather than rewriting the React app, we mount
-aliases here so the new FastAPI backend is a drop-in replacement.
-
-Alias map:
-  POST /auth/google/                  → patient auth (magic-link + Google OAuth)
-  GET  /api/validate_token/           → token validation (patient + doctor)
-  POST /api/login/                    → doctor / hospital login (legacy format)
-  GET  /api/doctor_tabs/              → doctor consultation tab list
-  POST /api/doctor_conversation/      → get conversation messages by thread
-  GET  /api/system_prompt/            → get doctor's custom system prompt
-  POST /api/system_prompt/            → save doctor's custom system prompt
-  POST /api/chat_view/                → patient chat message
-  GET  /api/chat_history/             → patient chat history
-  GET  /api/consultation_list/        → patient consultation list
-  POST /api/archive_consultation/     → archive consultation
-  POST /api/doctor_chat_view/         → doctor AI assistant
-  POST /api/doctor_send_response/     → doctor sends final response
-  POST /api/create-payment-intent/    → PayPal order creation
-  POST /api/capture_payment/          → PayPal order capture
-"""
-
 import base64
 import os
 import uuid
 
-from fastapi import (APIRouter, Depends, File, Form, HTTPException, Request,
-                     UploadFile, status)
+from fastapi import (APIRouter, Depends, HTTPException, Request)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.api.v1.chatbot import (_DOCTOR_DRAFT_SYSTEM,
-                                    _GENERAL_EDUCATION_SYSTEM, _chat_with_ai,
+                                    _chat_with_ai,
                                     _create_patient_token,
                                     _generate_doctor_draft,
                                     _get_current_doctor, _get_current_patient,
                                     _get_or_create_thread, _process_images)
-from api.app.core.config import settings
 from api.app.core.security import (TokenError, create_access_token,
                                    decode_token, verify_password)
 from api.app.db.session import get_async_session
@@ -169,7 +142,6 @@ async def validate_token_legacy(
 
     role = payload.get("role", "")
     user_id = payload.get("sub", "")
-    email = payload.get("email", "")
 
     if role == "patient":
         patient = await session.scalar(
@@ -233,7 +205,6 @@ async def legacy_login(
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    from datetime import timedelta
 
     token = create_access_token(
         user_id=user.id,
@@ -597,7 +568,6 @@ CONSULTATION_PRICE_USD = float(os.environ.get("CONSULTATION_PRICE_USD", "15.00")
 
 async def _get_paypal_access_token() -> str:
     """Get a PayPal OAuth2 access token."""
-    import base64
 
     import httpx
 

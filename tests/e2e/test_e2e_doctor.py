@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-"""
-E2E: Doctor persona
-Flow: login → MediVoice session lifecycle → transcription → notifications →
-doctor dashboard → system prompt → consultation response → multi-tenant check.
-"""
-
 import uuid
 
 import pytest

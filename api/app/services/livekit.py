@@ -1,14 +1,5 @@
 from __future__ import annotations
 
-"""
-Multi-tenant LiveKit SIP dispatch.
-
-Key invariants:
-- hospital_name and agent_prompt_prefix are ALWAYS read from Room Metadata, never hardcoded.
-- vobiz_did is used as the outbound caller ID so patients see their hospital's official number.
-- trunk lookup uses HospitalConfig.vobiz_sip_trunk_id first, falls back to name search.
-"""
-
 import json
 import logging
 import os

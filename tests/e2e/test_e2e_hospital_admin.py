@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-"""
-E2E: Hospital Admin persona
-Full flow: login → create staff/doctor → upload patients → view dashboard →
-trigger campaign → view escalation management → verify multi-tenant isolation.
-"""
-
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -119,7 +112,6 @@ class TestHospitalAdminFlow:
         )
         assert r.status_code == 200
         assert "id" in r.json()
-        doctor_id = r.json()["id"]
 
         # ── 5. Verify doctor appears in list ─────────────────────────────────
         r = await async_client.get("/api/v1/doctors/", headers=auth)

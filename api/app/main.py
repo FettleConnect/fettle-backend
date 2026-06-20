@@ -1,20 +1,31 @@
 from __future__ import annotations
 
-import asyncio
-import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Windows: psycopg async requires SelectorEventLoop
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 from api.app.core.config import settings
 from api.app.db.base import engine
 
+
+from api.app.api.v1.auth import router as auth_router 
+from api.app.api.v1.chatbot import router as chatbot_router 
+from api.app.api.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router 
+from api.app.api.v1.chatbot_compat import _LEGACY_ROUTER as legacy_compat_router
+# ── Routers ───────────────────────────────────────────────────────────────────
+from api.app.api.v1.health import router as health_router 
+from api.app.api.v1.hospital.calls import router as calls_router 
+from api.app.api.v1.hospital.feedback import router as feedback_router 
+from api.app.api.v1.hospital.inbound_dashboard import router as inbound_dash_router 
+from api.app.api.v1.hospital.internal import router as internal_router 
+from api.app.api.v1.hospital.management import router as management_router 
+from api.app.api.v1.hospital.medivoice import router as medivoice_router 
+from api.app.api.v1.hospital.outbound_dashboard import router as outbound_dash_router 
+from api.app.api.v1.hospital.patients import router as patients_router 
+from api.app.api.v1.hospital.webhooks import router as webhooks_router 
+from api.app.api.v1.tenant import router as tenant_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -41,32 +52,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from api.app.api.v1.auth import router as auth_router  # noqa: E402
-from api.app.api.v1.chatbot import router as chatbot_router  # noqa: E402
-from api.app.api.v1.chatbot_compat import \
-    _GOOGLE_AUTH_ROUTER as google_auth_router  # noqa: E402
-from api.app.api.v1.chatbot_compat import \
-    _LEGACY_ROUTER as legacy_compat_router
-# ── Routers ───────────────────────────────────────────────────────────────────
-from api.app.api.v1.health import router as health_router  # noqa: E402
-from api.app.api.v1.hospital.calls import router as calls_router  # noqa: E402
-from api.app.api.v1.hospital.feedback import \
-    router as feedback_router  # noqa: E402
-from api.app.api.v1.hospital.inbound_dashboard import \
-    router as inbound_dash_router  # noqa: E402
-from api.app.api.v1.hospital.internal import \
-    router as internal_router  # noqa: E402
-from api.app.api.v1.hospital.management import \
-    router as management_router  # noqa: E402
-from api.app.api.v1.hospital.medivoice import \
-    router as medivoice_router  # noqa: E402
-from api.app.api.v1.hospital.outbound_dashboard import \
-    router as outbound_dash_router  # noqa: E402
-from api.app.api.v1.hospital.patients import \
-    router as patients_router  # noqa: E402
-from api.app.api.v1.hospital.webhooks import \
-    router as webhooks_router  # noqa: E402
-from api.app.api.v1.tenant import router as tenant_router  # noqa: E402
 
 _V1 = "/api/v1"
 

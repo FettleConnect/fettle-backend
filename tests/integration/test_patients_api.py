@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import uuid
 
 import pytest
@@ -96,8 +95,6 @@ class TestFetchPatients:
     async def test_list_patients_scoped_to_org(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        from api.app.core.security import hash_password
-        from api.app.models.auth import User
         from api.app.models.hospital.patient import Patient
         from api.app.models.organization import Organization
 

@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, Numeric,
-                        String, Table, Text, UniqueConstraint, Uuid, func)
+                        String, Table, Text, Uuid, func)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from api.app.db.base import Base
 from api.app.models.base import TenantMixin, TimestampMixin

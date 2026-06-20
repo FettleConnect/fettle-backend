@@ -1,26 +1,8 @@
 from __future__ import annotations
 
-"""
-Webhook handlers for LiveKit and Vobiz.
-
-LiveKit Webhook (POST /api/v1/webhooks/livekit):
-  - room_finished → triggers process_outbound_calls or process_inbound_calls task
-
-Vobiz Inbound Webhook (POST /api/v1/webhooks/vobiz/inbound):
-  - Maps 'To' DID to organization via HospitalConfig.vobiz_did (NO hardcoded numbers).
-  - Creates or updates InboundCall record.
-
-Vobiz Outbound Webhook (POST /api/v1/webhooks/vobiz/outbound):
-  - Updates OutboundCall status via correlation ID.
-
-Vobiz WhatsApp Webhook (POST /api/v1/webhooks/vobiz/whatsapp):
-  - Logs delivery status and incoming messages.
-"""
-
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select, update

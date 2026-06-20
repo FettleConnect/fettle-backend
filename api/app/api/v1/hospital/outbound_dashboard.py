@@ -1,19 +1,12 @@
 from __future__ import annotations
 
-"""
-Outbound dashboard analytics — all aggregations done in SQL (no Python-side loops).
-Translates legacy app/views.py KPISummary, AdminDashboardView, Patientengagement,
-CommunityEngagement, RevisitAnalyticsAPIView, EscalationEngagement, fetchrecentactivity.
-"""
-
-import uuid
 from calendar import month_abbr
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Float, cast, func, select, text
+from sqlalchemy import Float, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.api.deps import get_current_user

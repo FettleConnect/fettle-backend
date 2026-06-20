@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-"""
-E2E: Agent and webhook persona flows
-Tests the complete LiveKit/Vobiz webhook pipeline, agent escalation,
-patient phone lookup, and inbound call processing.
-"""
-
 import os
 import uuid
 

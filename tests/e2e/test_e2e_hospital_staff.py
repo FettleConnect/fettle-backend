@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-"""
-E2E: Hospital Staff (hospital_user) persona
-Flow: login → view patients → log feedback → escalation → community engagement →
-view dashboards → verify permission enforcement.
-"""
-
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -21,8 +14,6 @@ async def _setup_staff_with_patients(
 ) -> tuple:
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import (CallFeedback,
-                                              CommunityEngagement, Escalation)
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 

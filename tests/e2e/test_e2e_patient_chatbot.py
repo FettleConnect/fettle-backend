@@ -1,12 +1,5 @@
 from __future__ import annotations
 
-"""
-E2E: Dermatology Patient persona
-Full consultation flow: auth → general education → payment → intake →
-dermatologist review → final output.
-Also tests the Google/magic-link auth paths the frontend actually calls.
-"""
-
 import uuid
 
 import pytest
@@ -181,11 +174,6 @@ class TestPatientChatbotFlow:
         doc_auth = {"Authorization": f"Bearer {doc_token}"}
         r = await async_client.get("/api/doctor_tabs/", headers=doc_auth)
         assert r.status_code == 200
-        # Thread should appear as it's paid
-        # Note: thread is paid because we sent CONFIRM
-        # Check tabs list
-        tabs = r.json()["tabs_doc"]
-        # At minimum the endpoint shouldn't crash
 
         # ── 11. Doctor views conversation ─────────────────────────────────────
         r = await async_client.post(

@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-"""
-Sprint 5 integration tests:
-- Agent escalation internal endpoint
-- Dermatology chatbot (auth, chat, consultations, doctor views)
-"""
-
 import os
 import uuid
 
@@ -14,7 +8,6 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.integration
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@ async def _full_setup(async_client: AsyncClient, db_session: AsyncSession) -> tu
     from api.app.core.security import hash_password
     from api.app.models.auth import User
     from api.app.models.hospital.call import (CallFeedback,
-                                              CommunityEngagement, Escalation)
+                                              Escalation)
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 

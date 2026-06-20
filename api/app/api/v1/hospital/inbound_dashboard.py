@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-"""
-Inbound dashboard analytics — mirrors outbound but for InboundCall + InboundFeedback tables.
-All aggregations done in SQL.
-"""
-
 from calendar import month_abbr
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone

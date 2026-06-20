@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-"""
-Internal API endpoints — protected by X-Internal-API-Secret header.
-Called by the LiveKit agent process, NOT by browser clients.
-"""
-
 import os
-import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.db.session import get_async_session

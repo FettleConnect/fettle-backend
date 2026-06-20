@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import io
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,6 @@ from api.app.models.auth import User
 from api.app.models.hospital.call import InboundCall, OutboundCall
 from api.app.models.hospital.campaign import Campaign
 from api.app.models.hospital.patient import Patient
-from api.app.models.organization import HospitalConfig, Organization
 
 router = APIRouter(tags=["calls"])
 
@@ -44,12 +43,6 @@ async def trigger_outbound(
     end_date_str: str | None = body.get("end_date")
     unconnected_only: bool = body.get("unconnected_only", False)
     audience_type: str = body.get("audience_type", "all")
-
-    # Fetch org name for metadata
-    org_name = (
-        await session.scalar(select(Organization.name).where(Organization.id == org_id))
-        or ""
-    )
 
     if is_individual and patient_ids:
         # Individual calls — queue immediately
