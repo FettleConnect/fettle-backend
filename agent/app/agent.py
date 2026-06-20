@@ -312,7 +312,7 @@ class InboundAssistant(_FillerMixin, Agent):
     ) -> str:
         # Derive hospital name from instructions (already embedded)
         hospital_name = (
-            context.agent.instructions.split(".")[0]
+            self.instructions.split(".")[0]
             .replace("You are a front-desk assistant for ", "")
             .strip()
         )
@@ -536,7 +536,7 @@ async def entrypoint(ctx: JobContext) -> None:
     session = await create_session(ctx)
 
     if is_outbound:
-        assistant = OutboundAssistant(
+        assistant: Agent = OutboundAssistant(
             instructions, caller_number=caller_number, organization_id=organization_id
         )
         greeting = meta.get("greeting") or OUTBOUND_GREETING_TEMPLATE.format(

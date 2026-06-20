@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install linters
         run: |
@@ -33,6 +33,43 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JWT_SECRET_KEY: test-secret-key-at-least-32-chars-long!!
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
+      INTERNAL_API_SHARED_SECRET: test-internal-secret
+      INTERNAL_API_BASE_URL: http://test
+      LIVEKIT_URL: ""
+      LIVEKIT_URL_INTERNAL: http://localhost:7880
+      LIVEKIT_API_KEY: ""
+      LIVEKIT_API_SECRET: ""
+      OPENAI_API_KEY: ""
+      OPENROUTER_API_KEY: ""
 
     steps:
       - name: Checkout
@@ -41,12 +78,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r api/requirements.txt -r agent/requirements.txt pytest httpx
+          pip install -r api/requirements.txt -r agent/requirements.txt -r requirements-dev.txt
 
       - name: Run tests
         run: pytest

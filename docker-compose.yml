@@ -29,6 +29,35 @@ services:
     networks:
       - dev-network
 
+  api-test:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.test
+    command: pytest
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_test
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTERNAL_API_BASE_URL: http://api:8000
+      INTERNAL_API_SHARED_SECRET: ${INTERNAL_API_SHARED_SECRET:-test-internal-secret}
+    volumes:
+      - ./api/app:/app/app:rw
+      - ./tests:/app/tests:rw
+      - ./pytest.ini:/app/pytest.ini:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dev-network
+    profiles:
+      - test
+
   celery:
     build:
       context: ./api

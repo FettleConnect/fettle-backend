@@ -6,10 +6,6 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.app.core.config import settings
-from api.app.db.base import engine
-
-
 from api.app.api.v1.auth import router as auth_router
 from api.app.api.v1.chatbot import router as chatbot_router
 from api.app.api.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router
@@ -27,6 +23,8 @@ from api.app.api.v1.hospital.outbound_dashboard import router as outbound_dash_r
 from api.app.api.v1.hospital.patients import router as patients_router
 from api.app.api.v1.hospital.webhooks import router as webhooks_router
 from api.app.api.v1.tenant import router as tenant_router
+from api.app.core.config import settings
+from api.app.db.base import engine
 
 
 @asynccontextmanager

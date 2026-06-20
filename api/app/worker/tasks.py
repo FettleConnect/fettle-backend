@@ -10,6 +10,7 @@ from datetime import timedelta, timezone
 from typing import Any, cast
 
 import boto3
+import redis as _redis_lib
 from asgiref.sync import async_to_sync
 from sqlalchemy import select, update
 
@@ -17,7 +18,6 @@ from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on impo
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
 from api.app.services.llm import llm_client, openrouter_model
-import redis as _redis_lib
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> d
             temperature=0.2,
             response_format={"type": "json_object"},
         )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(response.choices[0].message.content or "{}")
         parsed["patient_id"] = patient_id
         parsed["called_at"] = called_at
         parsed["call_duration"] = duration

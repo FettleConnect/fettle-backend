@@ -124,7 +124,7 @@ Be clinical, precise, and base your draft strictly on the provided information."
 
 def _chat_with_ai(system: str, history: list[dict], question: str) -> str:
     """Call OpenRouter LLM with conversation history. Returns AI response text."""
-    messages = [{"role": "system", "content": system}]
+    messages: list[Any] = [{"role": "system", "content": system}]
     for msg in history[-10:]:  # Keep last 10 messages for context
         role = (
             "assistant"
@@ -144,7 +144,7 @@ def _chat_with_ai(system: str, history: list[dict], question: str) -> str:
             temperature=0.7,
             max_tokens=1000,
         )
-        return resp.choices[0].message.content.strip()
+        return (resp.choices[0].message.content or "").strip()
     except Exception as exc:
         return (
             f"I'm sorry, I was unable to generate a response. Please try again. ({exc})"
@@ -201,7 +201,9 @@ def _check_image_for_face_ai(image_bytes: bytes) -> bool:
                 }
             ],
         )
-        return "FACE_DETECTED" in resp.choices[0].message.content.strip().upper()
+        return (
+            "FACE_DETECTED" in (resp.choices[0].message.content or "").strip().upper()
+        )
     except Exception:
         return False
 
@@ -233,7 +235,7 @@ def _check_image_for_pii_ai(image_bytes: bytes) -> bool:
                 }
             ],
         )
-        return "PII_DETECTED" in resp.choices[0].message.content.strip().upper()
+        return "PII_DETECTED" in (resp.choices[0].message.content or "").strip().upper()
     except Exception:
         return False
 

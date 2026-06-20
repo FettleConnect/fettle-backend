@@ -102,7 +102,7 @@ async def dispatch_outbound_call(
             )
             # Pass caller DID via SIP headers for outbound masking
             if vobiz_did:
-                sip_request.sip_headers = {"X-Caller-DID": vobiz_did}
+                sip_request.headers["X-Caller-DID"] = vobiz_did
 
             await lk.sip.create_sip_participant(sip_request)
             logger.info(

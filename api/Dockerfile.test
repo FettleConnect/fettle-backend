@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_ROOT_USER_ACTION=ignore
+
+WORKDIR /app
+
+COPY api/requirements.txt ./api-requirements.txt
+COPY requirements-dev.txt ./requirements-dev.txt
+RUN python -m pip install --upgrade pip && \
+    pip install -r api-requirements.txt -r requirements-dev.txt
+
+COPY api/alembic.ini ./
+COPY api/alembic ./alembic
+COPY api/app ./app
+COPY pytest.ini ./
+COPY tests ./tests
+COPY api/test-entrypoint.sh ./test-entrypoint.sh
+
+# Match the runtime image's import layout: tests import api.app.*, while the
+# application code lives at /app/app inside the container.
+RUN mkdir -p /app/api && \
+    touch /app/api/__init__.py && \
+    ln -s /app/app /app/api/app && \
+    chmod +x /app/test-entrypoint.sh
+
+ENTRYPOINT ["./test-entrypoint.sh"]
+CMD ["pytest"]
