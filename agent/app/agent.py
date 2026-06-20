@@ -55,14 +55,7 @@ def _internal_secret() -> str:
 
 
 def _openrouter_api_key() -> str:
-    api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get(
-        "OPENAI_API_KEY", ""
-    )
-    if not os.environ.get("OPENROUTER_API_KEY") and api_key:
-        logger.warning(
-            "OPENAI_API_KEY is being used as a legacy alias for OPENROUTER_API_KEY"
-        )
-    return api_key
+    return os.environ.get("OPENROUTER_API_KEY", "")
 
 
 def _openrouter_model() -> str:
