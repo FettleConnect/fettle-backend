@@ -47,6 +47,7 @@ _THINKING_FILLERS = ["Uhm...", "Hmm...", "Mm-hm...", "Right...", "Okay..."]
 INBOUND_GREETING_TEMPLATE = "Hello, this is the {hospital_name} front desk. How can I help today?"
 OUTBOUND_GREETING_TEMPLATE = "Hello, this is calling from {hospital_name}. Do you have a minute?"
 NAME_FALLBACK_TEMPLATE = "Hello, this is the {hospital_name} front desk. Could you tell me your name, please?"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 # ── Internal API helpers ───────────────────────────────────────────────────────
@@ -57,6 +58,17 @@ def _internal_api_base() -> str:
 
 def _internal_secret() -> str:
     return os.environ.get("INTERNAL_API_SHARED_SECRET", "")
+
+
+def _openrouter_api_key() -> str:
+    api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
+    if not os.environ.get("OPENROUTER_API_KEY") and api_key:
+        logger.warning("OPENAI_API_KEY is being used as a legacy alias for OPENROUTER_API_KEY")
+    return api_key
+
+
+def _openrouter_model() -> str:
+    return os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
 
 
 async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
@@ -365,9 +377,9 @@ def prewarm(proc: JobProcess) -> None:
         params=soniox.STTOptions(language_hints=["en", "hi", "te"]),
     )
     proc.userdata["llm"] = openai.LLM(
-        model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ.get("OPENROUTER_API_KEY", os.environ.get("OPENAI_API_KEY", "")),
+        model=_openrouter_model(),
+        base_url=OPENROUTER_BASE_URL,
+        api_key=_openrouter_api_key(),
     )
     proc.userdata["tts"] = cartesia.TTS(
         model="sonic-3",

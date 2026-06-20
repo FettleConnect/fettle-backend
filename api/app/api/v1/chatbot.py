@@ -15,7 +15,6 @@ via POST /api/v1/chatbot/auth (email + organization_id).
 
 import base64
 import io
-import os
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -31,6 +30,7 @@ from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.organization import Organization
+from api.app.services.llm import llm_client, openrouter_model
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
@@ -122,14 +122,6 @@ Format:
 Be clinical, precise, and base your draft strictly on the provided information."""
 
 
-def _ai_client():
-    from openai import OpenAI
-    return OpenAI(
-        api_key=settings.openrouter_api_key or settings.openai_api_key,
-        base_url="https://openrouter.ai/api/v1",
-    )
-
-
 def _chat_with_ai(system: str, history: list[dict], question: str) -> str:
     """Call OpenRouter LLM with conversation history. Returns AI response text."""
     messages = [{"role": "system", "content": system}]
@@ -141,9 +133,9 @@ def _chat_with_ai(system: str, history: list[dict], question: str) -> str:
     messages.append({"role": "user", "content": question})
 
     try:
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             messages=messages,
             temperature=0.7,
             max_tokens=1000,
@@ -180,9 +172,9 @@ def _check_image_for_face_ai(image_bytes: bytes) -> bool:
     """Returns True if a human face is detected in the image."""
     try:
         b64 = base64.b64encode(image_bytes).decode()
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             max_tokens=10,
             messages=[{
                 "role": "user",
@@ -201,9 +193,9 @@ def _check_image_for_pii_ai(image_bytes: bytes) -> bool:
     """Returns True if PII (name, DOB, phone, ID) is visible in the image."""
     try:
         b64 = base64.b64encode(image_bytes).decode()
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             max_tokens=10,
             messages=[{
                 "role": "user",

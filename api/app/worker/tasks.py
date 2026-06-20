@@ -14,21 +14,18 @@ from datetime import datetime, timedelta, timezone, time as dt_time
 import boto3
 from asgiref.sync import async_to_sync
 from celery import shared_task
-from openai import OpenAI
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on import)
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
+from api.app.services.llm import llm_client, openrouter_model
 
 logger = logging.getLogger(__name__)
 
 # ── Shared OpenRouter client ─────────────────────────────────────────────────
-_openrouter_client = OpenAI(
-    api_key=settings.openrouter_api_key or settings.openai_api_key,
-    base_url="https://openrouter.ai/api/v1",
-)
+_openrouter_client = llm_client()
 
 # ── Redis for concurrency tracking ───────────────────────────────────────────
 import redis as _redis_lib
@@ -98,7 +95,7 @@ def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> d
     """
     try:
         response = _openrouter_client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze transcript:\n{text}\ncalled_at: {called_at}"},

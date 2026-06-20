@@ -54,6 +54,7 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------------ LLM
     openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-4o"
     openai_api_key: str = ""
 
     # ------------------------------------------------------------------ Concurrency limits
