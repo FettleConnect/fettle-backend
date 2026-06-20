@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
+from api.app.models.hospital.medivoice import (MediVoiceSession,
+                                               MediVoiceTranscription)
 from api.app.models.organization import Organization
 
 router = APIRouter(prefix="/medivoice", tags=["medivoice"])
@@ -69,14 +70,20 @@ async def list_sessions(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    rows = (await session.execute(
-        select(MediVoiceSession)
-        .where(
-            MediVoiceSession.organization_id == current_user.organization_id,
-            MediVoiceSession.doctor_id == current_user.id,
+    rows = (
+        (
+            await session.execute(
+                select(MediVoiceSession)
+                .where(
+                    MediVoiceSession.organization_id == current_user.organization_id,
+                    MediVoiceSession.doctor_id == current_user.id,
+                )
+                .order_by(MediVoiceSession.created_at.desc())
+            )
         )
-        .order_by(MediVoiceSession.created_at.desc())
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return {
         "error": 0,
@@ -128,14 +135,16 @@ async def add_transcript(
 ) -> dict:
     await _get_session_or_404(session, session_id, current_user)
 
-    session.add(MediVoiceTranscription(
-        id=uuid.uuid4(),
-        organization_id=current_user.organization_id,
-        session_id=session_id,
-        speaker=body.speaker,
-        text=body.text,
-        timestamp=body.timestamp,
-    ))
+    session.add(
+        MediVoiceTranscription(
+            id=uuid.uuid4(),
+            organization_id=current_user.organization_id,
+            session_id=session_id,
+            speaker=body.speaker,
+            text=body.text,
+            timestamp=body.timestamp,
+        )
+    )
     return {"error": 0, "msg": "Transcription added"}
 
 
@@ -148,7 +157,9 @@ async def notify_patient(
     """Trigger prescription WhatsApp notification and schedule revisit reminders."""
     await _get_session_or_404(session, session_id, current_user)
 
-    from api.app.worker.tasks import schedule_reminder_calls, send_prescription_notifications
+    from api.app.worker.tasks import (schedule_reminder_calls,
+                                      send_prescription_notifications)
+
     send_prescription_notifications.delay(str(session_id))
     schedule_reminder_calls.delay(str(session_id))
 
@@ -163,11 +174,17 @@ async def get_session(
 ) -> dict:
     mv = await _get_session_or_404(session, session_id, current_user)
 
-    transcripts = (await session.execute(
-        select(MediVoiceTranscription)
-        .where(MediVoiceTranscription.session_id == session_id)
-        .order_by(MediVoiceTranscription.timestamp)
-    )).scalars().all()
+    transcripts = (
+        (
+            await session.execute(
+                select(MediVoiceTranscription)
+                .where(MediVoiceTranscription.session_id == session_id)
+                .order_by(MediVoiceTranscription.timestamp)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "error": 0,
@@ -220,11 +237,15 @@ async def sync_session(
     secret_env = os.environ.get("INTERNAL_API_SHARED_SECRET", "")
     provided = request.headers.get("X-Fettle-Secret", "")
     if not secret_env or provided != secret_env:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+        )
 
     # Lookup doctor by email
     doctor = await session.scalar(
-        select(User).where(User.email == body.doctorEmail.lower().strip(), User.role == "doctor")
+        select(User).where(
+            User.email == body.doctorEmail.lower().strip(), User.role == "doctor"
+        )
     )
     if doctor is None:
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -232,7 +253,9 @@ async def sync_session(
     meta = body.metaData or {}
     diagnosis = body.diagnosis or meta.get("diagnosis") or meta.get("clinicalSummary")
     medicines = body.medicines or meta.get("medicines") or meta.get("medications") or []
-    revisit_date = body.revisitDate or meta.get("revisit_date") or meta.get("revisitDate")
+    revisit_date = (
+        body.revisitDate or meta.get("revisit_date") or meta.get("revisitDate")
+    )
     revisit_time = body.revisitTime or meta.get("revisit_time")
 
     mv = MediVoiceSession(
@@ -252,17 +275,21 @@ async def sync_session(
     session.add(mv)
     await session.flush()
 
-    for t in (body.transcriptions or []):
-        session.add(MediVoiceTranscription(
-            id=uuid.uuid4(),
-            organization_id=doctor.organization_id,
-            session_id=mv.id,
-            speaker=t.get("speaker", ""),
-            text=t.get("text", ""),
-            timestamp=t.get("timestamp", 0.0),
-        ))
+    for t in body.transcriptions or []:
+        session.add(
+            MediVoiceTranscription(
+                id=uuid.uuid4(),
+                organization_id=doctor.organization_id,
+                session_id=mv.id,
+                speaker=t.get("speaker", ""),
+                text=t.get("text", ""),
+                timestamp=t.get("timestamp", 0.0),
+            )
+        )
 
-    from api.app.worker.tasks import schedule_reminder_calls, send_prescription_notifications
+    from api.app.worker.tasks import (schedule_reminder_calls,
+                                      send_prescription_notifications)
+
     send_prescription_notifications.delay(str(mv.id))
     schedule_reminder_calls.delay(str(mv.id))
 
@@ -278,10 +305,13 @@ async def get_session_artifact(
 ) -> "Response":
     """Stream session artifact (transcript, audio) from S3."""
     from fastapi.responses import Response as _Response
+
     from api.app.services.s3 import get_presigned_url
 
     if artifact_type not in ("transcript", "audio", "pdf"):
-        raise HTTPException(status_code=400, detail="Invalid artifact type. Use: transcript, audio, pdf")
+        raise HTTPException(
+            status_code=400, detail="Invalid artifact type. Use: transcript, audio, pdf"
+        )
 
     mv = await _get_session_or_404(session, session_id, current_user)
 
@@ -292,18 +322,26 @@ async def get_session_artifact(
 
     if artifact_type == "transcript":
         # Build transcript text from DB
-        transcripts = (await session.execute(
-            select(MediVoiceTranscription)
-            .where(MediVoiceTranscription.session_id == session_id)
-            .order_by(MediVoiceTranscription.timestamp)
-        )).scalars().all()
+        transcripts = (
+            (
+                await session.execute(
+                    select(MediVoiceTranscription)
+                    .where(MediVoiceTranscription.session_id == session_id)
+                    .order_by(MediVoiceTranscription.timestamp)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         lines = [f"[{t.speaker.upper()}] {t.text}" for t in transcripts]
         content = "\n".join(lines).encode()
         return _Response(
             content=content,
             media_type="text/plain",
-            headers={"Content-Disposition": f'attachment; filename="transcript_{session_id}.txt"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="transcript_{session_id}.txt"'
+            },
         )
 
     # PDF — basic HTML-to-text fallback (WeasyPrint not guaranteed in env)
@@ -311,11 +349,17 @@ async def get_session_artifact(
         select(Organization).where(Organization.id == current_user.organization_id)
     )
     doctor = await session.scalar(select(User).where(User.id == mv.doctor_id))
-    transcripts = (await session.execute(
-        select(MediVoiceTranscription)
-        .where(MediVoiceTranscription.session_id == session_id)
-        .order_by(MediVoiceTranscription.timestamp)
-    )).scalars().all()
+    transcripts = (
+        (
+            await session.execute(
+                select(MediVoiceTranscription)
+                .where(MediVoiceTranscription.session_id == session_id)
+                .order_by(MediVoiceTranscription.timestamp)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     lines = [
         f"Hospital: {org.name if org else 'N/A'}",
@@ -327,7 +371,14 @@ async def get_session_artifact(
         f"Summary: {mv.overall_summary or 'N/A'}",
         "",
         "Prescription:",
-        *(f"  - {m}" if isinstance(m, str) else f"  - {m.get('name')} {m.get('dosage','')}" for m in (mv.medicines or [])),
+        *(
+            (
+                f"  - {m}"
+                if isinstance(m, str)
+                else f"  - {m.get('name')} {m.get('dosage','')}"
+            )
+            for m in (mv.medicines or [])
+        ),
         "",
         "Transcript:",
         *(f"  [{t.speaker.upper()}] {t.text}" for t in transcripts),
@@ -336,11 +387,15 @@ async def get_session_artifact(
     return _Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="prescription_{session_id}.txt"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="prescription_{session_id}.txt"'
+        },
     )
 
 
-async def _get_session_or_404(session, session_id: uuid.UUID, user: User) -> MediVoiceSession:
+async def _get_session_or_404(
+    session, session_id: uuid.UUID, user: User
+) -> MediVoiceSession:
     mv = await session.scalar(
         select(MediVoiceSession).where(
             MediVoiceSession.id == session_id,
@@ -348,5 +403,7 @@ async def _get_session_or_404(session, session_id: uuid.UUID, user: User) -> Med
         )
     )
     if mv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
     return mv

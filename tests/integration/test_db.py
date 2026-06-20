@@ -87,9 +87,9 @@ class TestOrganizationCRUD:
 
 class TestUserCRUD:
     async def test_create_user(self, db_session) -> None:
+        from api.app.core.security import hash_password
         from api.app.models.auth import User
         from api.app.models.organization import Organization
-        from api.app.core.security import hash_password
 
         org = Organization(
             id=uuid.uuid4(),
@@ -111,9 +111,7 @@ class TestUserCRUD:
         db_session.add(user)
         await db_session.flush()
 
-        result = await db_session.execute(
-            select(User).where(User.id == user.id)
-        )
+        result = await db_session.execute(select(User).where(User.id == user.id))
         fetched = result.scalar_one()
         assert fetched.email == "admin@hospital.com"
         assert fetched.role == "hospital_admin"
@@ -122,9 +120,9 @@ class TestUserCRUD:
     async def test_user_unique_per_org_email(self, db_session) -> None:
         from sqlalchemy.exc import IntegrityError
 
+        from api.app.core.security import hash_password
         from api.app.models.auth import User
         from api.app.models.organization import Organization
-        from api.app.core.security import hash_password
 
         org = Organization(
             id=uuid.uuid4(),
@@ -199,10 +197,16 @@ class TestMultiTenantIsolation:
         from api.app.models.organization import Organization
 
         org1 = Organization(
-            id=uuid.uuid4(), name="Org1", slug=f"iso-org1-{uuid.uuid4().hex[:8]}", type="hospital"
+            id=uuid.uuid4(),
+            name="Org1",
+            slug=f"iso-org1-{uuid.uuid4().hex[:8]}",
+            type="hospital",
         )
         org2 = Organization(
-            id=uuid.uuid4(), name="Org2", slug=f"iso-org2-{uuid.uuid4().hex[:8]}", type="hospital"
+            id=uuid.uuid4(),
+            name="Org2",
+            slug=f"iso-org2-{uuid.uuid4().hex[:8]}",
+            type="hospital",
         )
         db_session.add_all([org1, org2])
         await db_session.flush()

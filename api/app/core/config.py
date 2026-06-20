@@ -54,6 +54,7 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------------ LLM
     openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-4o"
     openai_api_key: str = ""
 
     # ------------------------------------------------------------------ Concurrency limits
@@ -75,7 +76,7 @@ class Settings(BaseSettings):
         if not v or len(v) < 32:
             raise ValueError(
                 "JWT_SECRET_KEY must be set and at least 32 characters. "
-                "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return v
 

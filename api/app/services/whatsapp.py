@@ -39,10 +39,14 @@ async def send_whatsapp(
     if template_name:
         components = []
         if template_params:
-            components.append({
-                "type": "body",
-                "parameters": [{"type": "text", "text": p} for p in template_params],
-            })
+            components.append(
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": p} for p in template_params
+                    ],
+                }
+            )
         payload: dict = {
             "to": to,
             "type": "template",

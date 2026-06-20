@@ -1,37 +1,24 @@
 from __future__ import annotations
 
-"""
-Dermatology AI Chatbot API
-
-Patient flow (modes):
-  general_education   → patient asks general skin questions; AI responds freely
-  post_payment_intake → patient completes structured intake (no AI response, frontend drives)
-  dermatologist_review → intake submitted, awaiting doctor review (AI silent)
-  final_output        → doctor has responded; AI silent
-
-Protected by a patient-specific JWT (role=patient). The patient authenticates
-via POST /api/v1/chatbot/auth (email + organization_id).
-"""
-
 import base64
-import io
-import os
 import uuid
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel, EmailStr
+from fastapi import (APIRouter, Depends, HTTPException, Request,
+                     status)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.core.config import settings
-from api.app.core.security import create_access_token, decode_token, TokenError
+from api.app.core.security import TokenError, create_access_token, decode_token
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
+from api.app.models.hospital.dermatology import (DermatologyPatient,
+                                                 DermatologyThread)
 from api.app.models.organization import Organization
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from api.app.services.llm import llm_client, openrouter_model
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
@@ -39,9 +26,10 @@ _bearer = HTTPBearer()
 
 # ── Patient JWT helpers ───────────────────────────────────────────────────────
 
+
 def _create_patient_token(patient: DermatologyPatient, org_id: uuid.UUID) -> str:
     """Create a long-lived JWT (7 days) for a dermatology patient."""
-    from datetime import timedelta
+
     return create_access_token(
         user_id=patient.id,
         email=patient.email,
@@ -58,17 +46,26 @@ async def _get_current_patient(
     try:
         payload = decode_token(credentials.credentials)
     except TokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc),
-                            headers={"WWW-Authenticate": "Bearer"}) from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
     if payload.get("role") != "patient":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Patient token required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Patient token required"
+        )
 
     patient = await session.scalar(
-        select(DermatologyPatient).where(DermatologyPatient.id == uuid.UUID(payload["sub"]))
+        select(DermatologyPatient).where(
+            DermatologyPatient.id == uuid.UUID(payload["sub"])
+        )
     )
     if patient is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Patient not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Patient not found"
+        )
     return patient
 
 
@@ -79,11 +76,16 @@ async def _get_current_doctor(
     try:
         payload = decode_token(credentials.credentials)
     except TokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc),
-                            headers={"WWW-Authenticate": "Bearer"}) from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
     user = await session.scalar(
-        select(User).where(User.id == uuid.UUID(payload["sub"]), User.is_active.is_(True))
+        select(User).where(
+            User.id == uuid.UUID(payload["sub"]), User.is_active.is_(True)
+        )
     )
     if user is None or user.role != "doctor":
         raise HTTPException(status_code=403, detail="Doctor token required")
@@ -122,35 +124,33 @@ Format:
 Be clinical, precise, and base your draft strictly on the provided information."""
 
 
-def _ai_client():
-    from openai import OpenAI
-    return OpenAI(
-        api_key=settings.openrouter_api_key or settings.openai_api_key,
-        base_url="https://openrouter.ai/api/v1",
-    )
-
-
 def _chat_with_ai(system: str, history: list[dict], question: str) -> str:
     """Call OpenRouter LLM with conversation history. Returns AI response text."""
     messages = [{"role": "system", "content": system}]
     for msg in history[-10:]:  # Keep last 10 messages for context
-        role = "assistant" if msg.get("role", "").lower() in ("ai", "assistant") else "user"
+        role = (
+            "assistant"
+            if msg.get("role", "").lower() in ("ai", "assistant")
+            else "user"
+        )
         content = msg.get("content", "")
         if content:
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": question})
 
     try:
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             messages=messages,
             temperature=0.7,
             max_tokens=1000,
         )
         return resp.choices[0].message.content.strip()
     except Exception as exc:
-        return f"I'm sorry, I was unable to generate a response. Please try again. ({exc})"
+        return (
+            f"I'm sorry, I was unable to generate a response. Please try again. ({exc})"
+        )
 
 
 def _generate_doctor_draft(thread: DermatologyThread) -> str:
@@ -180,17 +180,28 @@ def _check_image_for_face_ai(image_bytes: bytes) -> bool:
     """Returns True if a human face is detected in the image."""
     try:
         b64 = base64.b64encode(image_bytes).decode()
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             max_tokens=10,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
-                    {"type": "text", "text": "Does this image contain a human face with clearly visible eyes, nose, and mouth together? Reply FACE_DETECTED or NO_FACE only."},
-                ],
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{b64}",
+                                "detail": "low",
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "Does this image contain a human face with clearly visible eyes, nose, and mouth together? Reply FACE_DETECTED or NO_FACE only.",
+                        },
+                    ],
+                }
+            ],
         )
         return "FACE_DETECTED" in resp.choices[0].message.content.strip().upper()
     except Exception:
@@ -201,17 +212,28 @@ def _check_image_for_pii_ai(image_bytes: bytes) -> bool:
     """Returns True if PII (name, DOB, phone, ID) is visible in the image."""
     try:
         b64 = base64.b64encode(image_bytes).decode()
-        client = _ai_client()
+        client = llm_client()
         resp = client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             max_tokens=10,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
-                    {"type": "text", "text": "Does this image contain clearly readable personal information such as a patient name, date of birth, phone number, or ID number? Reply PII_DETECTED or PII_CLEAR only."},
-                ],
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{b64}",
+                                "detail": "low",
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "Does this image contain clearly readable personal information such as a patient name, date of birth, phone number, or ID number? Reply PII_DETECTED or PII_CLEAR only.",
+                        },
+                    ],
+                }
+            ],
         )
         return "PII_DETECTED" in resp.choices[0].message.content.strip().upper()
     except Exception:
@@ -220,7 +242,8 @@ def _check_image_for_pii_ai(image_bytes: bytes) -> bool:
 
 async def _upload_image_to_s3(image_bytes: bytes, filename: str) -> str:
     """Upload image to S3 and return the presigned URL."""
-    from api.app.services.s3 import upload_bytes_to_s3, get_presigned_url
+    from api.app.services.s3 import get_presigned_url, upload_bytes_to_s3
+
     key = f"dermatology_images/{uuid.uuid4().hex}_{filename}"
     s3_url = await upload_bytes_to_s3(image_bytes, key, "image/jpeg")
     return get_presigned_url(s3_url) or s3_url
@@ -228,10 +251,16 @@ async def _upload_image_to_s3(image_bytes: bytes, filename: str) -> str:
 
 # ── Thread helpers ────────────────────────────────────────────────────────────
 
-async def _get_or_create_thread(session: AsyncSession, patient: DermatologyPatient) -> DermatologyThread:
+
+async def _get_or_create_thread(
+    session: AsyncSession, patient: DermatologyPatient
+) -> DermatologyThread:
     thread = await session.scalar(
         select(DermatologyThread)
-        .where(DermatologyThread.patient_id == patient.id, DermatologyThread.status == "active")
+        .where(
+            DermatologyThread.patient_id == patient.id,
+            DermatologyThread.status == "active",
+        )
         .order_by(DermatologyThread.created_at.desc())
     )
     if thread is None:
@@ -250,6 +279,7 @@ async def _get_or_create_thread(session: AsyncSession, patient: DermatologyPatie
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
 
 class PatientAuthIn(BaseModel):
     email: str
@@ -298,6 +328,7 @@ async def patient_auth(
 
 
 # ── Patient chat ──────────────────────────────────────────────────────────────
+
 
 @router.get("/chat")
 async def get_chat_history(
@@ -348,15 +379,15 @@ async def send_chat_message(
     content_type = request.headers.get("content-type", "")
     if "multipart" in content_type:
         form = await request.form()
-        question = form.get("question", "")
-        step = form.get("step", "")
-        thread_id = form.get("thread_id", "")
+        question = str(form.get("question", "") or "")
+        step = str(form.get("step", "") or "")
+        thread_id = str(form.get("thread_id", "") or "")
         images = form.getlist("image")  # type: ignore[attr-defined]
     else:
         data = await request.json()
-        question = data.get("question", "")
-        step = data.get("step", "")
-        thread_id = data.get("thread_id", "")
+        question = str(data.get("question", "") or "")
+        step = str(data.get("step", "") or "")
+        thread_id = str(data.get("thread_id", "") or "")
         images = []
 
     # Resolve thread
@@ -364,7 +395,7 @@ async def send_chat_message(
     if thread_id:
         try:
             thread = await session.scalar(
-                select(DermatologyThread).where(
+                cast(Any, select(DermatologyThread)).where(
                     DermatologyThread.id == uuid.UUID(thread_id),
                     DermatologyThread.patient_id == patient.id,
                 )
@@ -379,16 +410,31 @@ async def send_chat_message(
     # ── FIX 1: Guard — silent modes ──────────────────────────────────────────
     if thread.mode in ("dermatologist_review", "final_output"):
         if question and question not in ("", "CONFIRM"):
-            user_msg: dict = {"id": f"user-{uuid.uuid4().hex}", "role": "user", "content": question}
+            user_msg: dict = {
+                "id": f"user-{uuid.uuid4().hex}",
+                "role": "user",
+                "content": question,
+            }
             if images:
                 urls = await _process_images(images, step, conv)
                 if isinstance(urls, str):  # error string from detection
-                    return {"result": urls, "response": urls, "role": "ai", "mode": thread.mode}
+                    return {
+                        "result": urls,
+                        "response": urls,
+                        "role": "ai",
+                        "mode": thread.mode,
+                    }
                 if urls:
                     user_msg["images"] = urls
             conv.append(user_msg)
             thread.conversation = conv
-        return {"result": "", "response": "", "message": "", "role": "ai", "mode": thread.mode}
+        return {
+            "result": "",
+            "response": "",
+            "message": "",
+            "role": "ai",
+            "mode": thread.mode,
+        }
 
     # ── Payment confirmation ─────────────────────────────────────────────────
     if question == "CONFIRM":
@@ -401,7 +447,12 @@ async def send_chat_message(
     if images:
         result = await _process_images(images, step, conv)
         if isinstance(result, str):  # detection error
-            return {"result": result, "response": result, "role": "ai", "mode": thread.mode}
+            return {
+                "result": result,
+                "response": result,
+                "role": "ai",
+                "mode": thread.mode,
+            }
         new_img_urls = result
 
     # ── Build user message ───────────────────────────────────────────────────
@@ -427,17 +478,22 @@ async def send_chat_message(
         if "INTAKE COMPLETE" in question and "Summary:" in question:
             for line in question.splitlines():
                 line = line.strip()
-                for key, prefix in [("duration", "Duration:"), ("symptoms", "Symptoms:"),
-                                    ("location", "Location:"), ("meds", "Meds:"), ("history", "History:")]:
+                for key, prefix in [
+                    ("duration", "Duration:"),
+                    ("symptoms", "Symptoms:"),
+                    ("location", "Location:"),
+                    ("meds", "Meds:"),
+                    ("history", "History:"),
+                ]:
                     if line.startswith(prefix):
-                        intake[key] = line[len(prefix):].strip()
+                        intake[key] = line[len(prefix) :].strip()
 
             thread.mode = "dermatologist_review"
             thread.intake_data = intake
             thread.conversation = conv
 
             # Background draft generation — non-blocking
-            import asyncio
+
             draft = _generate_doctor_draft(thread)
             if draft:
                 thread.draft_response = draft
@@ -455,7 +511,13 @@ async def send_chat_message(
     conv.append(ai_msg)
     thread.conversation = conv
 
-    return {"result": ai_response, "response": ai_response, "message": ai_response, "role": "ai", "mode": thread.mode}
+    return {
+        "result": ai_response,
+        "response": ai_response,
+        "message": ai_response,
+        "role": "ai",
+        "mode": thread.mode,
+    }
 
 
 async def _process_images(images, step: str, existing_conv: list) -> list[str] | str:
@@ -496,16 +558,23 @@ async def _process_images(images, step: str, existing_conv: list) -> list[str] |
 
 # ── Patient consultation management ──────────────────────────────────────────
 
+
 @router.get("/consultations")
 async def list_consultations(
     patient: DermatologyPatient = Depends(_get_current_patient),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    threads = (await session.execute(
-        select(DermatologyThread)
-        .where(DermatologyThread.patient_id == patient.id)
-        .order_by(DermatologyThread.created_at.desc())
-    )).scalars().all()
+    threads = (
+        (
+            await session.execute(
+                select(DermatologyThread)
+                .where(DermatologyThread.patient_id == patient.id)
+                .order_by(DermatologyThread.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "error": 0,
@@ -531,7 +600,10 @@ async def archive_consultation(
     # Complete all active threads
     await session.execute(
         update(DermatologyThread)
-        .where(DermatologyThread.patient_id == patient.id, DermatologyThread.status == "active")
+        .where(
+            DermatologyThread.patient_id == patient.id,
+            DermatologyThread.status == "active",
+        )
         .values(status="completed")
     )
 
@@ -547,10 +619,15 @@ async def archive_consultation(
     session.add(new_thread)
     await session.flush()
 
-    return {"error": 0, "thread_id": str(new_thread.id), "msg": "New consultation started"}
+    return {
+        "error": 0,
+        "thread_id": str(new_thread.id),
+        "msg": "New consultation started",
+    }
 
 
 # ── Doctor views ──────────────────────────────────────────────────────────────
+
 
 @router.get("/doctor/consultations")
 async def doctor_list_consultations(
@@ -558,15 +635,20 @@ async def doctor_list_consultations(
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Return all paid threads for the doctor's organization."""
-    threads = (await session.execute(
-        select(DermatologyThread, DermatologyPatient)
-        .join(DermatologyPatient, DermatologyThread.patient_id == DermatologyPatient.id)
-        .where(
-            DermatologyThread.organization_id == doctor.organization_id,
-            DermatologyThread.payment_status == "paid",
+    threads = (
+        await session.execute(
+            select(DermatologyThread, DermatologyPatient)
+            .join(
+                DermatologyPatient,
+                DermatologyThread.patient_id == DermatologyPatient.id,
+            )
+            .where(
+                DermatologyThread.organization_id == doctor.organization_id,
+                DermatologyThread.payment_status == "paid",
+            )
+            .order_by(DermatologyThread.created_at.desc())
         )
-        .order_by(DermatologyThread.created_at.desc())
-    )).all()
+    ).all()
 
     conversations = []
     for thread, patient in threads:
@@ -575,30 +657,32 @@ async def doctor_list_consultations(
         for url in intake.get("skin_images", []) + intake.get("report_images", []):
             if url not in all_images:
                 all_images.append(url)
-        for msg in (thread.conversation or []):
-            for url in (msg.get("images") or []):
+        for msg in thread.conversation or []:
+            for url in msg.get("images") or []:
                 if url not in all_images:
                     all_images.append(url)
 
-        conversations.append({
-            "id": str(thread.id),
-            "patient_id": str(patient.id),
-            "patientEmail": patient.email,
-            "patientName": patient.name,
-            "mode": thread.mode,
-            "paymentStatus": thread.payment_status,
-            "status": thread.status,
-            "draftResponse": thread.draft_response or "",
-            "intakeData": {
-                "duration": intake.get("duration", ""),
-                "symptoms": intake.get("symptoms", ""),
-                "location": intake.get("location", ""),
-                "medicationsTried": intake.get("meds", ""),
-                "relevantHealthHistory": intake.get("history", ""),
-                "images": all_images,
-            },
-            "messages": thread.conversation or [],
-        })
+        conversations.append(
+            {
+                "id": str(thread.id),
+                "patient_id": str(patient.id),
+                "patientEmail": patient.email,
+                "patientName": patient.name,
+                "mode": thread.mode,
+                "paymentStatus": thread.payment_status,
+                "status": thread.status,
+                "draftResponse": thread.draft_response or "",
+                "intakeData": {
+                    "duration": intake.get("duration", ""),
+                    "symptoms": intake.get("symptoms", ""),
+                    "location": intake.get("location", ""),
+                    "medicationsTried": intake.get("meds", ""),
+                    "relevantHealthHistory": intake.get("history", ""),
+                    "images": all_images,
+                },
+                "messages": thread.conversation or [],
+            }
+        )
 
     return {"error": 0, "conversations": conversations}
 
@@ -628,7 +712,11 @@ async def doctor_ai_chat(
         draft = _generate_doctor_draft(thread)
         if draft:
             thread.draft_response = draft
-        return {"result": "Draft regenerated", "draft": thread.draft_response or "", "error": 0}
+        return {
+            "result": "Draft regenerated",
+            "draft": thread.draft_response or "",
+            "error": 0,
+        }
 
     conv = thread.conversation or []
     ai_response = _chat_with_ai(_DOCTOR_DRAFT_SYSTEM, conv, body.question)
@@ -664,12 +752,14 @@ async def doctor_send_response(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     conv = list(thread.conversation or [])
-    conv.append({
-        "id": f"doctor-{uuid.uuid4().hex}",
-        "role": "doctor",
-        "content": body.question,
-        "senderName": doctor.name,
-    })
+    conv.append(
+        {
+            "id": f"doctor-{uuid.uuid4().hex}",
+            "role": "doctor",
+            "content": body.question,
+            "senderName": doctor.name,
+        }
+    )
 
     thread.conversation = conv
     thread.mode = "final_output"

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (Boolean, ForeignKey, Numeric, String, Text,
+                        UniqueConstraint, Uuid)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 

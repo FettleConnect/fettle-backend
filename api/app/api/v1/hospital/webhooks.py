@@ -1,31 +1,13 @@
 from __future__ import annotations
 
-"""
-Webhook handlers for LiveKit and Vobiz.
-
-LiveKit Webhook (POST /api/v1/webhooks/livekit):
-  - room_finished → triggers process_outbound_calls or process_inbound_calls task
-
-Vobiz Inbound Webhook (POST /api/v1/webhooks/vobiz/inbound):
-  - Maps 'To' DID to organization via HospitalConfig.vobiz_did (NO hardcoded numbers).
-  - Creates or updates InboundCall record.
-
-Vobiz Outbound Webhook (POST /api/v1/webhooks/vobiz/outbound):
-  - Updates OutboundCall status via correlation ID.
-
-Vobiz WhatsApp Webhook (POST /api/v1/webhooks/vobiz/whatsapp):
-  - Logs delivery status and incoming messages.
-"""
-
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends
 
 from api.app.db.session import get_async_session
 from api.app.models.hospital.call import InboundCall, OutboundCall
@@ -78,13 +60,14 @@ async def _handle_room_finished(room_name: str, session: AsyncSession) -> None:
     # Decrement concurrency counter (self-healing: clamp to 0)
     try:
         r = _redis.StrictRedis.from_url(settings.redis_url, decode_responses=True)
-        new_count = r.decr("active_outbound_calls_count")
+        new_count = int(cast(Any, r.decr("active_outbound_calls_count")))
         if new_count < 0:
             r.set("active_outbound_calls_count", 0)
     except Exception as exc:
         logger.warning("Redis decrement failed: %s", exc)
 
-    from api.app.worker.tasks import process_inbound_calls, process_outbound_calls
+    from api.app.worker.tasks import (process_inbound_calls,
+                                      process_outbound_calls)
 
     if room_name.startswith("inbound_"):
         process_inbound_calls.delay({"vapi_id": room_name})
@@ -95,11 +78,13 @@ async def _handle_room_finished(room_name: str, session: AsyncSession) -> None:
             select(OutboundCall).where(OutboundCall.livekit_call_id == room_name)
         )
         if call:
-            process_outbound_calls.delay({
-                "id": str(call.id),
-                "vapi_id": room_name,
-                "patient_id": str(call.patient_id) if call.patient_id else None,
-            })
+            process_outbound_calls.delay(
+                {
+                    "id": str(call.id),
+                    "vapi_id": room_name,
+                    "patient_id": str(call.patient_id) if call.patient_id else None,
+                }
+            )
             logger.info("Outbound processing triggered: %s", room_name)
         else:
             logger.warning("No outbound call record for room: %s", room_name)
@@ -126,7 +111,13 @@ async def vobiz_inbound_webhook(
     from_num = data.get("From", "")
     to_num = data.get("To", "")
 
-    logger.info("Vobiz inbound: UUID=%s Status=%s From=%s To=%s", call_uuid, call_status, from_num, to_num)
+    logger.info(
+        "Vobiz inbound: UUID=%s Status=%s From=%s To=%s",
+        call_uuid,
+        call_status,
+        from_num,
+        to_num,
+    )
 
     if not call_uuid:
         return {"status": "acknowledged", "msg": "no CallUUID"}
@@ -135,9 +126,7 @@ async def vobiz_inbound_webhook(
     org_id: uuid.UUID | None = None
     if to_num:
         cfg = await session.scalar(
-            select(HospitalConfig).where(
-                HospitalConfig.vobiz_did == to_num.strip()
-            )
+            select(HospitalConfig).where(HospitalConfig.vobiz_did == to_num.strip())
         )
         if cfg:
             org_id = cfg.organization_id
@@ -156,7 +145,9 @@ async def vobiz_inbound_webhook(
         logger.info("Inbound: unknown DID %s — no matching HospitalConfig", to_num)
         return {"status": "acknowledged", "msg": "unknown DID"}
 
-    calling_process = "connected" if call_status in ("completed", "answered") else "not_happened"
+    calling_process = (
+        "connected" if call_status in ("completed", "answered") else "not_happened"
+    )
 
     # Upsert InboundCall record
     existing = await session.scalar(
@@ -166,16 +157,18 @@ async def vobiz_inbound_webhook(
         existing.status = call_status
         existing.calling_process = calling_process
     else:
-        session.add(InboundCall(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            livekit_call_id=call_uuid,
-            status=call_status,
-            from_phone_number=from_num,
-            to_phone_number=to_num,
-            calling_process=calling_process,
-            started_at=datetime.now(tz=timezone.utc),
-        ))
+        session.add(
+            InboundCall(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                livekit_call_id=call_uuid,
+                status=call_status,
+                from_phone_number=from_num,
+                to_phone_number=to_num,
+                calling_process=calling_process,
+                started_at=datetime.now(tz=timezone.utc),
+            )
+        )
 
     await session.flush()  # Ensure record is visible in the same session/transaction
     return {"status": "acknowledged"}
@@ -200,7 +193,9 @@ async def vobiz_outbound_webhook(
     custom_headers = data.get("CustomSIPHeaders", {})
     correlation_id = custom_headers.get("X-VH-CorrelationId")
 
-    logger.info("Vobiz outbound: Status=%s CorrelationId=%s", call_status, correlation_id)
+    logger.info(
+        "Vobiz outbound: Status=%s CorrelationId=%s", call_status, correlation_id
+    )
 
     if correlation_id:
         db_status, calling_process = _VOBIZ_STATUS_MAP.get(call_status, (None, None))

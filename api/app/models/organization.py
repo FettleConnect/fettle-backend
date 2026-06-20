@@ -19,7 +19,9 @@ class Organization(TimestampMixin, Base):
         Uuid, primary_key=True, default=uuid.uuid4, insert_default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, index=True
+    )
     # Discriminator: "hospital" | "corporate" | "clinical"
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

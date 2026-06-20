@@ -1,7 +1,4 @@
 from __future__ import annotations
-
-"""Unit tests for Celery task helpers — no DB or LiveKit needed."""
-
 import json
 
 
@@ -11,23 +8,31 @@ class TestJsonAudioAnalysis:
 
         # Mock OpenRouter response
         mock_choice = MagicMock()
-        mock_choice.message.content = json.dumps({
-            "call_status": "connected",
-            "call_outcome": "positive",
-            "remarks": "Patient was happy",
-            "issue_description": "",
-            "called_by": "CloudConnect Agent",
-            "community_added": False,
-            "revisit_encouraged": True,
-            "escalation_required": False,
-        })
+        mock_choice.message.content = json.dumps(
+            {
+                "call_status": "connected",
+                "call_outcome": "positive",
+                "remarks": "Patient was happy",
+                "issue_description": "",
+                "called_by": "CloudConnect Agent",
+                "community_added": False,
+                "revisit_encouraged": True,
+                "escalation_required": False,
+            }
+        )
 
         with patch("api.app.worker.tasks._openrouter_client") as mock_client:
             mock_client.chat.completions.create.return_value = MagicMock(
                 choices=[mock_choice]
             )
             from api.app.worker.tasks import json_audio
-            result = json_audio("patient-uuid-123", "agent: Hello\npatient: Hi", "2024-01-01T10:00:00", 2.5)
+
+            result = json_audio(
+                "patient-uuid-123",
+                "agent: Hello\npatient: Hi",
+                "2024-01-01T10:00:00",
+                2.5,
+            )
 
         assert result["call_status"] == "connected"
         assert result["call_outcome"] == "positive"
@@ -45,6 +50,7 @@ class TestJsonAudioAnalysis:
                 choices=[mock_choice]
             )
             from api.app.worker.tasks import json_audio
+
             result = json_audio("pid", "text", "2024-01-01", 1.0)
 
         assert result.get("error") == 1
@@ -55,6 +61,7 @@ class TestJsonAudioAnalysis:
         with patch("api.app.worker.tasks._openrouter_client") as mock_client:
             mock_client.chat.completions.create.side_effect = Exception("API down")
             from api.app.worker.tasks import json_audio
+
             result = json_audio("pid", "text", "2024-01-01", 1.0)
 
         assert result.get("error") == 1
@@ -65,7 +72,9 @@ class TestRoomNameClassification:
         from api.app.worker.tasks import _is_inbound_room
 
         assert _is_inbound_room("inbound_+911234567890_abc123") is True
-        assert _is_inbound_room("out_patient__hospital__phone__20240101_livekit") is False
+        assert (
+            _is_inbound_room("out_patient__hospital__phone__20240101_livekit") is False
+        )
 
     def test_outbound_room_not_inbound(self) -> None:
         from api.app.worker.tasks import _is_inbound_room

@@ -83,7 +83,7 @@ jobs:
           PROD_PORT: ${{ secrets.PROD_PORT }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           ssh -p "${PROD_PORT:-22}" "${PROD_USER}@${PROD_HOST}" "mkdir -p \"${APP_DIR}\""
           scp -P "${PROD_PORT:-22}" deploy/prod/docker-compose.prod.yml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/docker-compose.prod.yml"
@@ -130,11 +130,11 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_PORT: ${{ secrets.PROD_PORT }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           printf '%s\n' \
             "API_IMAGE=${API_IMAGE}:${IMAGE_TAG}" \
@@ -146,7 +146,8 @@ jobs:
             "LIVEKIT_API_KEY=${LIVEKIT_API_KEY}" \
             "LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}" \
             "LIVEKIT_ROOM_NAME=default" \
-            "OPENAI_API_KEY=${OPENAI_API_KEY}" > .prod.env
+            "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
+            "OPENROUTER_MODEL=openai/gpt-4o" > .prod.env
 
           scp -P "${PROD_PORT:-22}" .prod.env "${PROD_USER}@${PROD_HOST}:${APP_DIR}/.env"
 

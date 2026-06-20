@@ -11,33 +11,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.call import (
-    CallFeedback,
-    CommunityEngagement,
-    Escalation,
-    InboundCall,
-    InboundCommunityEngagement,
-    InboundEscalation,
-    InboundFeedback,
-)
+from api.app.models.hospital.call import (CallFeedback, CommunityEngagement,
+                                          Escalation, InboundCall,
+                                          InboundCommunityEngagement,
+                                          InboundEscalation, InboundFeedback)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
-from api.app.schemas.hospital.feedback import (
-    CallFeedbackIn,
-    CommunityFeedbackIn,
-    EscalationFeedbackIn,
-    EscalationListResponse,
-    EscalationOut,
-    InboundCallFeedbackIn,
-    SimpleOkResponse,
-    UpdateCommunityIn,
-    UpdateEscalationIn,
-)
+from api.app.schemas.hospital.feedback import (CallFeedbackIn,
+                                               CommunityFeedbackIn,
+                                               EscalationFeedbackIn,
+                                               EscalationListResponse,
+                                               EscalationOut,
+                                               InboundCallFeedbackIn,
+                                               SimpleOkResponse,
+                                               UpdateCommunityIn,
+                                               UpdateEscalationIn)
 
 router = APIRouter(tags=["feedback"])
 
 
 # ── Outbound feedback ─────────────────────────────────────────────────────────
+
 
 @router.post("/calls/feedback", response_model=SimpleOkResponse)
 async def post_call_feedback(
@@ -80,13 +74,15 @@ async def post_escalation_feedback(
         select(Organization.name).where(Organization.id == org_id)
     )
 
-    session.add(Escalation(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        patient_id=patient.id,
-        issue_description=body.issue_description or "",
-        department=body.department,
-    ))
+    session.add(
+        Escalation(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            patient_id=patient.id,
+            issue_description=body.issue_description or "",
+            department=body.department,
+        )
+    )
 
     # Notify admin via WhatsApp (async, fire-and-forget via background)
     _notify_escalation_bg(
@@ -112,7 +108,9 @@ async def update_escalation(
         )
     )
     if esc is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Escalation not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Escalation not found"
+        )
 
     esc.status = body.status
     esc.resolution_notes = body.resolution_notes
@@ -126,16 +124,23 @@ async def list_escalations(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> EscalationListResponse:
-    rows = (await session.execute(
-        select(Escalation, Patient)
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(Escalation.organization_id == current_user.organization_id)
-        .order_by(Escalation.escalated_at.desc())
-    )).all()
+    rows = (
+        await session.execute(
+            select(Escalation, Patient)
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(Escalation.organization_id == current_user.organization_id)
+            .order_by(Escalation.escalated_at.desc())
+        )
+    ).all()
 
-    org_name = await session.scalar(
-        select(Organization.name).where(Organization.id == current_user.organization_id)
-    ) or ""
+    org_name = (
+        await session.scalar(
+            select(Organization.name).where(
+                Organization.id == current_user.organization_id
+            )
+        )
+        or ""
+    )
 
     data = [
         EscalationOut(
@@ -162,13 +167,15 @@ async def post_community_feedback(
 ) -> SimpleOkResponse:
     org_id = current_user.organization_id
     patient = await _get_patient_in_org(session, body.patient_id, org_id)
-    session.add(CommunityEngagement(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        patient_id=patient.id,
-        engagement_type=body.engagement_type,
-        department=body.department,
-    ))
+    session.add(
+        CommunityEngagement(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            patient_id=patient.id,
+            engagement_type=body.engagement_type,
+            department=body.department,
+        )
+    )
     return SimpleOkResponse(msg="Community feedback recorded")
 
 
@@ -193,6 +200,7 @@ async def update_community(
 
 # ── Inbound feedback ──────────────────────────────────────────────────────────
 
+
 @router.post("/inbound/feedback", response_model=SimpleOkResponse)
 async def post_inbound_feedback(
     body: InboundCallFeedbackIn,
@@ -209,36 +217,42 @@ async def post_inbound_feedback(
     if inbound_call is None:
         raise HTTPException(status_code=404, detail="Inbound call not found")
 
-    session.add(InboundFeedback(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        inbound_call_id=inbound_call.id,
-        call_outcome=body.call_outcome,
-        remarks=body.remarks,
-        community_added=body.community_added,
-        revisit_encouraged=body.revisit_encouraged,
-        escalation_required=body.escalation_required,
-        call_duration=body.call_duration,
-        called_by=body.called_by,
-    ))
+    session.add(
+        InboundFeedback(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            inbound_call_id=inbound_call.id,
+            call_outcome=body.call_outcome,
+            remarks=body.remarks,
+            community_added=body.community_added,
+            revisit_encouraged=body.revisit_encouraged,
+            escalation_required=body.escalation_required,
+            call_duration=body.call_duration,
+            called_by=body.called_by,
+        )
+    )
 
     if body.community_added:
-        session.add(InboundCommunityEngagement(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            inbound_call_id=inbound_call.id,
-            engagement_type="post",
-            department=inbound_call.department,
-        ))
+        session.add(
+            InboundCommunityEngagement(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                inbound_call_id=inbound_call.id,
+                engagement_type="post",
+                department=inbound_call.department,
+            )
+        )
 
     if body.escalation_required:
-        session.add(InboundEscalation(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            inbound_call_id=inbound_call.id,
-            issue_description=body.remarks or "Inbound Escalation",
-            department=inbound_call.department,
-        ))
+        session.add(
+            InboundEscalation(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                inbound_call_id=inbound_call.id,
+                issue_description=body.remarks or "Inbound Escalation",
+                department=inbound_call.department,
+            )
+        )
         admin_phone = os.getenv("ADMIN_PHONE", "+917032451866")
         _notify_escalation_bg(
             org_name="",
@@ -267,13 +281,15 @@ async def post_inbound_escalation(
     if inbound_call is None:
         raise HTTPException(status_code=404, detail="Inbound call not found")
 
-    session.add(InboundEscalation(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        inbound_call_id=inbound_call.id,
-        issue_description=body.issue_description or "",
-        department=body.department,
-    ))
+    session.add(
+        InboundEscalation(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            inbound_call_id=inbound_call.id,
+            issue_description=body.issue_description or "",
+            department=body.department,
+        )
+    )
     return SimpleOkResponse(msg="Escalation feedback recorded")
 
 
@@ -313,19 +329,24 @@ async def post_inbound_community(
     )
     if inbound_call is None:
         raise HTTPException(status_code=404, detail="Inbound call not found")
-    session.add(InboundCommunityEngagement(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        inbound_call_id=inbound_call.id,
-        engagement_type=body.engagement_type,
-        department=body.department,
-    ))
+    session.add(
+        InboundCommunityEngagement(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            inbound_call_id=inbound_call.id,
+            engagement_type=body.engagement_type,
+            department=body.department,
+        )
+    )
     return SimpleOkResponse(msg="Community feedback recorded")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _get_patient_in_org(session, patient_id: uuid.UUID, org_id: uuid.UUID) -> Patient:
+
+async def _get_patient_in_org(
+    session, patient_id: uuid.UUID, org_id: uuid.UUID
+) -> Patient:
     patient = await session.scalar(
         select(Patient).where(
             Patient.id == patient_id,
@@ -354,7 +375,7 @@ def _notify_escalation_bg(
 
     from api.app.services.whatsapp import send_whatsapp
 
-    admin_phone = to_number or os.getenv("ADMIN_PHONE", "+917032451866")
+    admin_phone = to_number or os.getenv("ADMIN_PHONE") or "+917032451866"
 
     async def _send() -> None:
         await send_whatsapp(

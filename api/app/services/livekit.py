@@ -1,14 +1,5 @@
 from __future__ import annotations
 
-"""
-Multi-tenant LiveKit SIP dispatch.
-
-Key invariants:
-- hospital_name and agent_prompt_prefix are ALWAYS read from Room Metadata, never hardcoded.
-- vobiz_did is used as the outbound caller ID so patients see their hospital's official number.
-- trunk lookup uses HospitalConfig.vobiz_sip_trunk_id first, falls back to name search.
-"""
-
 import json
 import logging
 import os
@@ -59,27 +50,35 @@ async def dispatch_outbound_call(
         if not phone_number.startswith("+"):
             phone_number = "+91" + phone_number.lstrip("0")
 
-        metadata = json.dumps({
-            "organization_id": organization_id,
-            "hospital_name": hospital_name,
-            "agent_prompt_prefix": agent_prompt_prefix,
-            "type": "outbound",
-            "phone_number": phone_number,
-            "patient_id": patient_id or "",
-            "campaign_id": campaign_id or "",
-            "prompt": prompt,
-        })
+        metadata = json.dumps(
+            {
+                "organization_id": organization_id,
+                "hospital_name": hospital_name,
+                "agent_prompt_prefix": agent_prompt_prefix,
+                "type": "outbound",
+                "phone_number": phone_number,
+                "patient_id": patient_id or "",
+                "campaign_id": campaign_id or "",
+                "prompt": prompt,
+            }
+        )
 
         async with lk_api.LiveKitAPI(url, api_key, api_secret) as lk:
             # 1. Resolve outbound SIP trunk
             outbound_trunk_id = sip_trunk_id
             if not outbound_trunk_id:
-                trunks = await lk.sip.list_outbound_trunk(lk_api.ListSIPOutboundTrunkRequest())
+                trunks = await lk.sip.list_outbound_trunk(
+                    lk_api.ListSIPOutboundTrunkRequest()
+                )
                 target = next(
-                    (t for t in trunks.items if t.name == _DEFAULT_OUTBOUND_TRUNK_NAME), None
+                    (t for t in trunks.items if t.name == _DEFAULT_OUTBOUND_TRUNK_NAME),
+                    None,
                 )
                 if not target:
-                    return {"error": 1, "msg": f"Trunk '{_DEFAULT_OUTBOUND_TRUNK_NAME}' not found"}
+                    return {
+                        "error": 1,
+                        "msg": f"Trunk '{_DEFAULT_OUTBOUND_TRUNK_NAME}' not found",
+                    }
                 outbound_trunk_id = target.sip_trunk_id
 
             logger.info("Dispatching agent to room %s for %s", room_id, hospital_name)
@@ -106,7 +105,11 @@ async def dispatch_outbound_call(
                 sip_request.sip_headers = {"X-Caller-DID": vobiz_did}
 
             await lk.sip.create_sip_participant(sip_request)
-            logger.info("Outbound SIP call initiated: %s → %s", vobiz_did or "default", phone_number)
+            logger.info(
+                "Outbound SIP call initiated: %s → %s",
+                vobiz_did or "default",
+                phone_number,
+            )
             return {"error": 0, "msg": "Dispatched"}
 
     except Exception as exc:
@@ -163,14 +166,24 @@ async def ensure_infrastructure(
         from livekit import api as lk_api
 
         url = _livekit_url()
-        async with lk_api.LiveKitAPI(url, settings.livekit_api_key, settings.livekit_api_secret) as lk:
+        async with lk_api.LiveKitAPI(
+            url, settings.livekit_api_key, settings.livekit_api_secret
+        ) as lk:
             # --- Inbound Trunk ---
-            inbound_trunks = await lk.sip.list_inbound_trunk(lk_api.ListSIPInboundTrunkRequest())
+            inbound_trunks = await lk.sip.list_inbound_trunk(
+                lk_api.ListSIPInboundTrunkRequest()
+            )
             trunk_name = f"Inbound_{vobiz_did.replace('+', '')}"
-            existing_trunk = next((t for t in inbound_trunks.items if t.name == trunk_name), None)
+            existing_trunk = next(
+                (t for t in inbound_trunks.items if t.name == trunk_name), None
+            )
 
             if not existing_trunk:
-                logger.info("Guard: Creating inbound trunk for %s (%s)", hospital_name, vobiz_did)
+                logger.info(
+                    "Guard: Creating inbound trunk for %s (%s)",
+                    hospital_name,
+                    vobiz_did,
+                )
                 created = await lk.sip.create_inbound_trunk(
                     lk_api.CreateSIPInboundTrunkRequest(
                         trunk=lk_api.SIPInboundTrunkInfo(
@@ -189,11 +202,13 @@ async def ensure_infrastructure(
 
             if not any(r.name == rule_name for r in rules.items):
                 logger.info("Guard: Creating dispatch rule for %s", vobiz_did)
-                room_metadata = json.dumps({
-                    "organization_id": organization_id,
-                    "hospital_name": hospital_name,
-                    "type": "inbound",
-                })
+                room_metadata = json.dumps(
+                    {
+                        "organization_id": organization_id,
+                        "hospital_name": hospital_name,
+                        "type": "inbound",
+                    }
+                )
                 await lk.sip.create_dispatch_rule(
                     lk_api.CreateSIPDispatchRuleRequest(
                         name=rule_name,

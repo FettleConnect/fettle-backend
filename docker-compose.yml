@@ -1,17 +1,16 @@
 services:
-  # ── API (FastAPI) ───────────────────────────────────────────────────────────
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
-    # Dev: hot-reload with uvicorn, skip alembic re-run on reload
     command: >
       sh -c "python -m alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     env_file:
-      - .env.dev
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_dev
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -30,7 +29,6 @@ services:
     networks:
       - dev-network
 
-  # ── Celery Worker ────────────────────────────────────────────────────────────
   celery:
     build:
       context: ./api
@@ -38,9 +36,10 @@ services:
     # app.worker is the module containing tasks.py (NOT app.tasks)
     command: celery -A app.celery_app.celery_app worker -l info --concurrency=2
     env_file:
-      - .env.dev
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_dev
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -56,13 +55,12 @@ services:
     networks:
       - dev-network
 
-  # ── LiveKit Agent ────────────────────────────────────────────────────────────
   fettle-agent:
     build:
       context: ./agent
       dockerfile: Dockerfile
     env_file:
-      - .env.dev
+      - .env
     environment:
       INTERNAL_API_BASE_URL: http://api:8000
       LIVEKIT_URL_INTERNAL: http://livekit-server:7880
@@ -72,7 +70,6 @@ services:
     networks:
       - dev-network
 
-  # ── PostgreSQL ───────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
@@ -92,7 +89,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ── Redis ────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     command: redis-server --save 60 1 --loglevel warning

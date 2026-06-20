@@ -71,9 +71,13 @@ async def _seed_admin(db_session: AsyncSession) -> tuple:
 
 
 class TestLoginEndpoint:
-    async def test_login_hospital_user_success(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_login_hospital_user_success(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, user_id, email, password = await _seed_hospital_user(db_session)
-        resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        resp = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["error"] == 0
@@ -81,46 +85,67 @@ class TestLoginEndpoint:
         assert len(body["token"]) > 20
         assert body["role"] == "hospital_user"
 
-    async def test_login_admin_success(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_login_admin_success(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, user_id, email, password = await _seed_admin(db_session)
-        resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        resp = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["error"] == 0
         assert "token" in body
         assert body["role"] == "hospital_admin"
 
-    async def test_login_wrong_password_fails(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_login_wrong_password_fails(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, _, email, _ = await _seed_hospital_user(db_session)
-        resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": "wrongpassword"})
+        resp = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": "wrongpassword"}
+        )
         assert resp.status_code == 401
 
     async def test_login_unknown_user_fails(self, async_client: AsyncClient) -> None:
-        resp = await async_client.post("/api/v1/auth/login", json={
-            "email": "nobody@nowhere.com",
-            "password": "anypassword",
-        })
+        resp = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "nobody@nowhere.com",
+                "password": "anypassword",
+            },
+        )
         assert resp.status_code == 401
 
     async def test_login_missing_email_fails(self, async_client: AsyncClient) -> None:
         resp = await async_client.post("/api/v1/auth/login", json={"password": "pw"})
         assert resp.status_code == 422
 
-    async def test_login_returns_organization_id(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_login_returns_organization_id(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         org_id, _, email, password = await _seed_hospital_user(db_session)
-        resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        resp = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert str(org_id) == body.get("organization_id")
 
 
 class TestValidateToken:
-    async def _get_token(self, async_client: AsyncClient, db_session: AsyncSession) -> str:
+    async def _get_token(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> str:
         _, _, email, password = await _seed_hospital_user(db_session)
-        resp = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        resp = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        )
         return resp.json()["token"]
 
-    async def test_validate_valid_token(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_validate_valid_token(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         token = await self._get_token(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/auth/validate",
@@ -145,9 +170,13 @@ class TestValidateToken:
 
 
 class TestTabAccess:
-    async def test_tab_access_returns_permissions(self, async_client: AsyncClient, db_session: AsyncSession) -> None:
+    async def test_tab_access_returns_permissions(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
         _, _, email, password = await _seed_hospital_user(db_session)
-        login = await async_client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        login = await async_client.post(
+            "/api/v1/auth/login", json={"email": email, "password": password}
+        )
         token = login.json()["token"]
         resp = await async_client.get(
             "/api/v1/auth/tab-access",

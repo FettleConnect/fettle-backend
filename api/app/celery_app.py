@@ -6,7 +6,9 @@ from celery import Celery
 
 
 def _broker_url() -> str:
-    return os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://redis:6379/0"))
+    return os.getenv(
+        "CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://redis:6379/0")
+    )
 
 
 def _result_backend() -> str:

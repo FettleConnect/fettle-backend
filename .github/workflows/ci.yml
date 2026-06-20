@@ -22,14 +22,14 @@ jobs:
       - name: Install linters
         run: |
           python -m pip install --upgrade pip
-          pip install black isort ruff mypy
+          pip install -r api/requirements.txt -r agent/requirements.txt -r requirements-dev.txt
 
       - name: Run linters
         run: |
           black --check api agent tests
           isort --check-only api agent tests
           ruff check api agent tests
-          mypy api/app agent/app || true
+          mypy api/app agent/app
 
   test:
     runs-on: ubuntu-latest

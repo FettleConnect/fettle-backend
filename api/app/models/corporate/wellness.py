@@ -3,41 +3,42 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    Table,
-    Text,
-    UniqueConstraint,
-    Uuid,
-    func,
-)
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, Numeric,
+                        String, Table, Text, Uuid, func)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from api.app.db.base import Base
 from api.app.models.base import TenantMixin, TimestampMixin
-
 
 # M2M: WellnessSession ↔ User (session join-interest requests)
 session_requests = Table(
     "session_requests",
     Base.metadata,
-    Column("session_id", Uuid, ForeignKey("wellness_sessions.id", ondelete="CASCADE"), primary_key=True),
-    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "session_id",
+        Uuid,
+        ForeignKey("wellness_sessions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 # M2M: OutdoorActivity ↔ User (activity interest requests)
 activity_requests = Table(
     "activity_requests",
     Base.metadata,
-    Column("activity_id", Uuid, ForeignKey("outdoor_activities.id", ondelete="CASCADE"), primary_key=True),
-    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "activity_id",
+        Uuid,
+        ForeignKey("outdoor_activities.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -92,7 +93,9 @@ class WellnessVideo(TenantMixin, TimestampMixin, Base):
     rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     rating_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     # standard | leadership | women_only | lgbtq
-    visibility: Mapped[str] = mapped_column(String(30), default="standard", nullable=False)
+    visibility: Mapped[str] = mapped_column(
+        String(30), default="standard", nullable=False
+    )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -119,7 +122,9 @@ class WellnessSession(TenantMixin, TimestampMixin, Base):
     google_meet_link: Mapped[str | None] = mapped_column(Text)
     s3_link: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
-    visibility: Mapped[str] = mapped_column(String(30), default="standard", nullable=False)
+    visibility: Mapped[str] = mapped_column(
+        String(30), default="standard", nullable=False
+    )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -148,7 +153,9 @@ class Therapist(TenantMixin, TimestampMixin, Base):
     s3_link: Mapped[str | None] = mapped_column(Text)
     rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     tags: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
-    visibility: Mapped[str] = mapped_column(String(30), default="standard", nullable=False)
+    visibility: Mapped[str] = mapped_column(
+        String(30), default="standard", nullable=False
+    )
     experience_years: Mapped[int | None] = mapped_column(Integer)
     hospital_affiliation: Mapped[str | None] = mapped_column(String(255))
     languages: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
@@ -174,9 +181,13 @@ class Package(TenantMixin, TimestampMixin, Base):
     items: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(String(20))
     # HIGH | MEDIUM | LOW
-    popularity: Mapped[str] = mapped_column(String(20), default="MEDIUM", nullable=False)
+    popularity: Mapped[str] = mapped_column(
+        String(20), default="MEDIUM", nullable=False
+    )
     s3_link: Mapped[str | None] = mapped_column(Text)
-    visibility: Mapped[str] = mapped_column(String(30), default="standard", nullable=False)
+    visibility: Mapped[str] = mapped_column(
+        String(30), default="standard", nullable=False
+    )
 
 
 class OutdoorActivity(TenantMixin, TimestampMixin, Base):
@@ -194,6 +205,8 @@ class OutdoorActivity(TenantMixin, TimestampMixin, Base):
     price: Mapped[float | None] = mapped_column(Numeric(10, 2))
     group_link: Mapped[str | None] = mapped_column(Text)
     s3_link: Mapped[str | None] = mapped_column(Text)
-    visibility: Mapped[str] = mapped_column(String(30), default="standard", nullable=False)
+    visibility: Mapped[str] = mapped_column(
+        String(30), default="standard", nullable=False
+    )
     availability_days: Mapped[str | None] = mapped_column(String(255))
     availability_time: Mapped[str | None] = mapped_column(String(255))

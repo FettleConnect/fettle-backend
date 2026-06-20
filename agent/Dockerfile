@@ -10,5 +10,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-# Agent runs as a LiveKit worker, not a web server
 CMD ["python", "app/agent.py", "start"]

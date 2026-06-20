@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 
 import boto3
 from botocore.exceptions import ClientError
@@ -31,7 +30,9 @@ def get_presigned_url(s3_url: str | None, expiry: int = 3600) -> str | None:
         return s3_url
 
 
-async def upload_bytes_to_s3(data: bytes, key: str, content_type: str = "application/octet-stream") -> str:
+async def upload_bytes_to_s3(
+    data: bytes, key: str, content_type: str = "application/octet-stream"
+) -> str:
     """Upload bytes to S3 and return the S3 URL."""
     client = boto3.client(
         "s3",

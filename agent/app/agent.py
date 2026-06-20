@@ -1,39 +1,19 @@
 from __future__ import annotations
 
-"""
-Fettle Unified LiveKit Agent (Multi-Tenant)
-
-All tenant-specific values (hospital_name, agent_prompt_prefix, organization_id)
-are read from LiveKit Room Metadata — NEVER hardcoded.
-
-Doctor schedules are fetched from the FastAPI backend via the internal API.
-WhatsApp notifications go through the Vobiz API directly.
-"""
-
 import asyncio
 import json
 import logging
 import os
 import random
-from typing import Any
+from typing import Any, cast
 
 import httpx
-
 from dotenv import load_dotenv
-from livekit import api, rtc
-from livekit.agents import (
-    Agent,
-    AgentServer,
-    AgentSession,
-    InterruptionOptions,
-    JobContext,
-    JobExecutorType,
-    JobProcess,
-    RunContext,
-    TurnHandlingOptions,
-    cli,
-    function_tool,
-)
+from livekit import rtc
+from livekit.agents import (Agent, AgentServer, AgentSession,
+                            InterruptionOptions, JobContext, JobExecutorType,
+                            JobProcess, RunContext, TurnHandlingOptions, cli,
+                            function_tool)
 from livekit.agents.beta.tools import EndCallTool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import cartesia, openai, silero, soniox
@@ -44,12 +24,18 @@ logger = logging.getLogger("fettle-agent")
 
 _THINKING_FILLERS = ["Uhm...", "Hmm...", "Mm-hm...", "Right...", "Okay..."]
 
-INBOUND_GREETING_TEMPLATE = "Hello, this is the {hospital_name} front desk. How can I help today?"
-OUTBOUND_GREETING_TEMPLATE = "Hello, this is calling from {hospital_name}. Do you have a minute?"
+INBOUND_GREETING_TEMPLATE = (
+    "Hello, this is the {hospital_name} front desk. How can I help today?"
+)
+OUTBOUND_GREETING_TEMPLATE = (
+    "Hello, this is calling from {hospital_name}. Do you have a minute?"
+)
 NAME_FALLBACK_TEMPLATE = "Hello, this is the {hospital_name} front desk. Could you tell me your name, please?"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 # ── Internal API helpers ───────────────────────────────────────────────────────
+
 
 def _internal_api_base() -> str:
     return os.environ.get("INTERNAL_API_BASE_URL", "http://api:8000").rstrip("/")
@@ -57,6 +43,21 @@ def _internal_api_base() -> str:
 
 def _internal_secret() -> str:
     return os.environ.get("INTERNAL_API_SHARED_SECRET", "")
+
+
+def _openrouter_api_key() -> str:
+    api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get(
+        "OPENAI_API_KEY", ""
+    )
+    if not os.environ.get("OPENROUTER_API_KEY") and api_key:
+        logger.warning(
+            "OPENAI_API_KEY is being used as a legacy alias for OPENROUTER_API_KEY"
+        )
+    return api_key
+
+
+def _openrouter_model() -> str:
+    return os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
 
 
 async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
@@ -142,9 +143,14 @@ async def _send_whatsapp(
 ) -> bool:
     vobiz_url = os.environ.get("VOBIZ_API_URL", "https://api.vobiz.ai")
     vobiz_key = os.environ.get("VOBIZ_API_KEY", "")
-    headers = {"X-Auth-ID": vobiz_key, "X-Auth-Token": vobiz_key, "Content-Type": "application/json"}
+    headers = {
+        "X-Auth-ID": vobiz_key,
+        "X-Auth-Token": vobiz_key,
+        "Content-Type": "application/json",
+    }
 
     import re
+
     digits = re.sub(r"\D", "", to_number)
     if not digits.startswith("91") and len(digits) == 10:
         digits = "91" + digits
@@ -153,14 +159,22 @@ async def _send_whatsapp(
     if template_name:
         components = []
         if template_params:
-            components.append({
-                "type": "body",
-                "parameters": [{"type": "text", "text": p} for p in template_params],
-            })
+            components.append(
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": p} for p in template_params
+                    ],
+                }
+            )
         payload: dict = {
             "to": to,
             "type": "template",
-            "template": {"name": template_name, "language": {"code": "en_US"}, "components": components},
+            "template": {
+                "name": template_name,
+                "language": {"code": "en_US"},
+                "components": components,
+            },
         }
     else:
         payload = {"to": to, "type": "text", "text": {"body": msg or ""}}
@@ -170,7 +184,9 @@ async def _send_whatsapp(
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(f"{vobiz_url}/api/v1/messaging/messages", json=payload, headers=headers)
+            await client.post(
+                f"{vobiz_url}/api/v1/messaging/messages", json=payload, headers=headers
+            )
             return True
     except Exception as exc:
         logger.warning("WhatsApp send failed: %s", exc)
@@ -178,6 +194,7 @@ async def _send_whatsapp(
 
 
 # ── Greeting helpers ──────────────────────────────────────────────────────────
+
 
 def _build_inbound_greeting(hospital_name: str, patient_payload: dict | None) -> str:
     generic = NAME_FALLBACK_TEMPLATE.format(hospital_name=hospital_name)
@@ -200,6 +217,7 @@ def _build_inbound_greeting(hospital_name: str, patient_payload: dict | None) ->
 
 # ── Agent classes ─────────────────────────────────────────────────────────────
 
+
 class _FillerMixin:
     """Shared filler-audio caching and on-turn-complete logic."""
 
@@ -219,12 +237,14 @@ class _FillerMixin:
     async def _play_filler(self) -> None:
         filler = random.choice(_THINKING_FILLERS)
         if filler in self._filler_audio_cache:
+
             async def _gen():
                 for frame in self._filler_audio_cache[filler]:
                     yield frame
-            self.session.say(filler, audio=_gen(), add_to_chat_ctx=False)
+
+            cast(Any, self).session.say(filler, audio=_gen(), add_to_chat_ctx=False)
         else:
-            self.session.say(filler, add_to_chat_ctx=False)
+            cast(Any, self).session.say(filler, add_to_chat_ctx=False)
 
 
 class InboundAssistant(_FillerMixin, Agent):
@@ -239,7 +259,9 @@ class InboundAssistant(_FillerMixin, Agent):
         self.organization_id = organization_id
         self.whatsapp_channel_id = whatsapp_channel_id
         self._filler_audio_cache: dict[str, list[rtc.AudioFrame]] = {}
-        super().__init__(instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]])
+        super().__init__(
+            instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]]
+        )
 
     async def on_enter(self) -> None:
         await self._cache_fillers(getattr(self, "tts", None))
@@ -251,14 +273,17 @@ class InboundAssistant(_FillerMixin, Agent):
         flags=ToolFlag.IGNORE_ON_ENTER,
         description="Get doctor timings, departments, consultation fees, and OPD schedules.",
     )
-    async def get_doctor_schedule(self, context: RunContext, doctor_name: str = "", department: str = "") -> str:
+    async def get_doctor_schedule(
+        self, context: RunContext, doctor_name: str = "", department: str = ""
+    ) -> str:
         doctors = await _fetch_doctor_schedule(self.organization_id)
         dn = doctor_name.lower().strip()
         dp = department.lower().strip()
         matches = [
             d["doctor_name"]
             for d in doctors
-            if (dn and dn in d["doctor_name"].lower()) or (dp and dp in d.get("department", "").lower())
+            if (dn and dn in d["doctor_name"].lower())
+            or (dp and dp in d.get("department", "").lower())
         ]
         unique = list(dict.fromkeys(matches[:5]))
         return ", ".join(unique) if unique else "No matching doctor found."
@@ -268,16 +293,31 @@ class InboundAssistant(_FillerMixin, Agent):
         description="Send WhatsApp appointment confirmation ONLY after appointment is fully confirmed.",
     )
     async def send_appointment_confirmation(
-        self, context: RunContext,
-        patient_name: str, doctor_name: str, department: str,
-        appointment_date: str, appointment_time: str,
+        self,
+        context: RunContext,
+        patient_name: str,
+        doctor_name: str,
+        department: str,
+        appointment_date: str,
+        appointment_time: str,
     ) -> str:
         # Derive hospital name from instructions (already embedded)
-        hospital_name = context.agent.instructions.split(".")[0].replace("You are a front-desk assistant for ", "").strip()
+        hospital_name = (
+            context.agent.instructions.split(".")[0]
+            .replace("You are a front-desk assistant for ", "")
+            .strip()
+        )
         await _send_whatsapp(
             to_number=self.caller_number or "",
             template_name="appointment_info",
-            template_params=[patient_name, doctor_name, department, appointment_date, appointment_time, hospital_name],
+            template_params=[
+                patient_name,
+                doctor_name,
+                department,
+                appointment_date,
+                appointment_time,
+                hospital_name,
+            ],
             channel_id=self.whatsapp_channel_id,
         )
         # Notify admin
@@ -293,7 +333,9 @@ class InboundAssistant(_FillerMixin, Agent):
         flags=ToolFlag.IGNORE_ON_ENTER,
         description="Fetch patient details by phone number. Use caller's phone first. Returns appointment history.",
     )
-    async def get_patient_info_by_phone(self, context: RunContext, phone_number: str = "") -> str:
+    async def get_patient_info_by_phone(
+        self, context: RunContext, phone_number: str = ""
+    ) -> str:
         lookup = phone_number.strip() or (self.caller_number or "").strip()
         if not lookup:
             return "What is your name?"
@@ -307,9 +349,12 @@ class InboundAssistant(_FillerMixin, Agent):
         description="Raise an escalation when the caller needs urgent help or is upset.",
     )
     async def raise_escalation(
-        self, context: RunContext,
-        issue_description: str, department: str = "",
-        patient_id: str | None = None, phone_number: str = "",
+        self,
+        context: RunContext,
+        issue_description: str,
+        department: str = "",
+        patient_id: str | None = None,
+        phone_number: str = "",
     ) -> str:
         phone = (phone_number or self.caller_number or "").strip()
         return await _raise_escalation(
@@ -331,7 +376,9 @@ class OutboundAssistant(_FillerMixin, Agent):
         self.caller_number = caller_number
         self.organization_id = organization_id
         self._filler_audio_cache: dict[str, list[rtc.AudioFrame]] = {}
-        super().__init__(instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]])
+        super().__init__(
+            instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]]
+        )
 
     async def on_enter(self) -> None:
         await self._cache_fillers(getattr(self, "tts", None))
@@ -343,7 +390,9 @@ class OutboundAssistant(_FillerMixin, Agent):
         flags=ToolFlag.IGNORE_ON_ENTER,
         description="Log call feedback outcome after the patient finishes responding.",
     )
-    async def log_call_outcome(self, context: RunContext, feedback_summary: str, sentiment: str) -> str:
+    async def log_call_outcome(
+        self, context: RunContext, feedback_summary: str, sentiment: str
+    ) -> str:
         admin_phone = os.environ.get("ADMIN_PHONE", "")
         if admin_phone:
             await _send_whatsapp(
@@ -365,13 +414,15 @@ def prewarm(proc: JobProcess) -> None:
         params=soniox.STTOptions(language_hints=["en", "hi", "te"]),
     )
     proc.userdata["llm"] = openai.LLM(
-        model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ.get("OPENROUTER_API_KEY", os.environ.get("OPENAI_API_KEY", "")),
+        model=_openrouter_model(),
+        base_url=OPENROUTER_BASE_URL,
+        api_key=_openrouter_api_key(),
     )
     proc.userdata["tts"] = cartesia.TTS(
         model="sonic-3",
-        voice=os.environ.get("CARTESIA_VOICE_ID", "927c55a9-74a9-4272-871e-a559c8989abe"),
+        voice=os.environ.get(
+            "CARTESIA_VOICE_ID", "927c55a9-74a9-4272-871e-a559c8989abe"
+        ),
     )
 
 
@@ -382,7 +433,8 @@ def ghost_protection(ctx: JobContext) -> None:
     @ctx.room.on("participant_disconnected")
     def _on_disconnect(participant: rtc.RemoteParticipant) -> None:
         non_agents = [
-            p for p in ctx.room.remote_participants.values()
+            p
+            for p in ctx.room.remote_participants.values()
             if p.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT
         ]
         if not non_agents:
@@ -421,8 +473,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
     logger.info(
         "JOB: id=%s org=%s hospital=%s type=%s room=%s",
-        ctx.job.id, organization_id, hospital_name,
-        "outbound" if is_outbound else "inbound", ctx.room.name,
+        ctx.job.id,
+        organization_id,
+        hospital_name,
+        "outbound" if is_outbound else "inbound",
+        ctx.room.name,
     )
 
     if is_outbound:
@@ -441,7 +496,9 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # Append custom hospital instructions
     if agent_prompt_prefix:
-        instructions = f"{base_inst}\n\nHospital-specific instructions:\n{agent_prompt_prefix}"
+        instructions = (
+            f"{base_inst}\n\nHospital-specific instructions:\n{agent_prompt_prefix}"
+        )
     else:
         instructions = base_inst
 
@@ -453,7 +510,10 @@ async def entrypoint(ctx: JobContext) -> None:
             if secret and organization_id:
                 r = await client.get(
                     f"{_internal_api_base()}/api/v1/tenant/branding",
-                    headers={"X-Internal-API-Secret": secret, "organization-id": organization_id},
+                    headers={
+                        "X-Internal-API-Secret": secret,
+                        "organization-id": organization_id,
+                    },
                 )
                 if r.status_code == 200:
                     whatsapp_channel_id = r.json().get("whatsapp_channel_id")
@@ -467,8 +527,12 @@ async def entrypoint(ctx: JobContext) -> None:
     session = await create_session(ctx)
 
     if is_outbound:
-        assistant = OutboundAssistant(instructions, caller_number=caller_number, organization_id=organization_id)
-        greeting = meta.get("greeting") or OUTBOUND_GREETING_TEMPLATE.format(hospital_name=hospital_name)
+        assistant = OutboundAssistant(
+            instructions, caller_number=caller_number, organization_id=organization_id
+        )
+        greeting = meta.get("greeting") or OUTBOUND_GREETING_TEMPLATE.format(
+            hospital_name=hospital_name
+        )
     else:
         assistant = InboundAssistant(
             instructions,
@@ -494,6 +558,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
 # ── Self-healing infrastructure guard (multi-tenant) ─────────────────────────
 
+
 async def infrastructure_guard() -> None:
     """
     Ensures all active hospital DIDs have inbound SIP trunks and dispatch rules.
@@ -508,23 +573,22 @@ async def infrastructure_guard() -> None:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{_internal_api_base()}/api/v1/tenant/hospitals",
-                headers={"X-Internal-API-Secret": secret, "Authorization": "Bearer skip-auth"},
+                headers={
+                    "X-Internal-API-Secret": secret,
+                    "Authorization": "Bearer skip-auth",
+                },
             )
             if resp.status_code != 200:
-                logger.warning("Guard: could not fetch hospital list (%d)", resp.status_code)
+                logger.warning(
+                    "Guard: could not fetch hospital list (%d)", resp.status_code
+                )
                 return
             hospitals = resp.json().get("data", [])
     except Exception as exc:
         logger.error("Guard: failed to fetch hospitals: %s", exc)
         return
-
-    livekit_url = (
-        os.environ.get("LIVEKIT_URL_INTERNAL", "http://livekit-server:7880")
-        if os.path.exists("/.dockerenv")
-        else os.environ.get("LIVEKIT_URL", "http://127.0.0.1:7880")
-    )
+    
     api_key = os.environ.get("LIVEKIT_API_KEY", "")
-    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
 
     if not api_key:
         logger.warning("Guard skipped: LIVEKIT_API_KEY not set")
@@ -538,7 +602,10 @@ async def infrastructure_guard() -> None:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.get(
                     f"{_internal_api_base()}/api/v1/tenant/branding",
-                    headers={"X-Internal-API-Secret": secret, "organization-id": org_id},
+                    headers={
+                        "X-Internal-API-Secret": secret,
+                        "organization-id": org_id,
+                    },
                 )
                 if r.status_code != 200:
                     continue
@@ -546,8 +613,12 @@ async def infrastructure_guard() -> None:
                 if not vobiz_did:
                     continue
 
-            from api.app.services.livekit import ensure_infrastructure as _ensure
-            await _ensure(organization_id=org_id, hospital_name=name, vobiz_did=vobiz_did)
+            from api.app.services.livekit import \
+                ensure_infrastructure as _ensure
+
+            await _ensure(
+                organization_id=org_id, hospital_name=name, vobiz_did=vobiz_did
+            )
         except Exception as exc:
             logger.error("Guard: failed for %s: %s", name, exc)
 

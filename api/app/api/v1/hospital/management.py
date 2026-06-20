@@ -1,12 +1,5 @@
 from __future__ import annotations
 
-"""
-Hospital management endpoints:
-- Campaign CRUD (list, delete)
-- Doctor management (list, create, staff availability)
-- WhatsApp broadcast text (set/get)
-"""
-
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,39 +20,58 @@ router = APIRouter(tags=["management"])
 
 # ── Campaign CRUD ─────────────────────────────────────────────────────────────
 
+
 @router.get("/campaigns/")
 async def list_campaigns(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     org_id = current_user.organization_id
-    campaigns = (await session.execute(
-        select(Campaign)
-        .where(Campaign.organization_id == org_id)
-        .order_by(Campaign.created_at.desc())
-    )).scalars().all()
+    campaigns = (
+        (
+            await session.execute(
+                select(Campaign)
+                .where(Campaign.organization_id == org_id)
+                .order_by(Campaign.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     data = []
     for c in campaigns:
-        total_calls = (await session.scalar(
-            select(func.count(OutboundCall.id))
-            .where(OutboundCall.campaign_id == c.id)
-        )) or 0
-        connected_calls = (await session.scalar(
-            select(func.count(OutboundCall.id))
-            .where(OutboundCall.campaign_id == c.id, OutboundCall.calling_process == "connected")
-        )) or 0
-        data.append({
-            "id": str(c.id),
-            "name": c.name,
-            "status": c.status,
-            "audience_type": c.audience_type,
-            "purpose": c.purpose,
-            "start_date": str(c.start_date) if c.start_date else None,
-            "end_date": str(c.end_date) if c.end_date else None,
-            "created_at": c.created_at.isoformat(),
-            "stats": {"total_calls": total_calls, "connected_calls": connected_calls},
-        })
+        total_calls = (
+            await session.scalar(
+                select(func.count(OutboundCall.id)).where(
+                    OutboundCall.campaign_id == c.id
+                )
+            )
+        ) or 0
+        connected_calls = (
+            await session.scalar(
+                select(func.count(OutboundCall.id)).where(
+                    OutboundCall.campaign_id == c.id,
+                    OutboundCall.calling_process == "connected",
+                )
+            )
+        ) or 0
+        data.append(
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "status": c.status,
+                "audience_type": c.audience_type,
+                "purpose": c.purpose,
+                "start_date": str(c.start_date) if c.start_date else None,
+                "end_date": str(c.end_date) if c.end_date else None,
+                "created_at": c.created_at.isoformat(),
+                "stats": {
+                    "total_calls": total_calls,
+                    "connected_calls": connected_calls,
+                },
+            }
+        )
 
     return {"error": 0, "data": data}
 
@@ -83,6 +95,7 @@ async def delete_campaign(
 
 
 # ── Doctor management ─────────────────────────────────────────────────────────
+
 
 class DoctorCreateIn(BaseModel):
     name: str
@@ -122,7 +135,9 @@ async def list_doctors(
                 "email": d.email,
                 "mobile_no": d.mobile_number,
                 "department": d.department,
-                "consultation_fee": float(d.consultation_fee) if d.consultation_fee else None,
+                "consultation_fee": (
+                    float(d.consultation_fee) if d.consultation_fee else None
+                ),
                 "timings": d.timings,
                 "availability": d.availability_json,
                 "created_at": d.created_at.isoformat(),
@@ -203,6 +218,7 @@ async def staff_availability(
 
 # ── WhatsApp broadcast text ────────────────────────────────────────────────────
 
+
 class BroadcastTextIn(BaseModel):
     text: str | None = None
     template_name: str | None = None
@@ -250,6 +266,7 @@ async def set_broadcast_text(
             select(Organization).where(Organization.id == current_user.organization_id)
         )
         import asyncio
+
         from api.app.services.whatsapp import send_whatsapp
 
         async def _broadcast():
@@ -275,7 +292,11 @@ async def set_broadcast_text(
                     )
 
         asyncio.create_task(_broadcast())
-        return {"error": 0, "msg": "Broadcast initiated", "count": len(body.target_numbers)}
+        return {
+            "error": 0,
+            "msg": "Broadcast initiated",
+            "count": len(body.target_numbers),
+        }
 
     return {"error": 0, "msg": "Template saved"}
 

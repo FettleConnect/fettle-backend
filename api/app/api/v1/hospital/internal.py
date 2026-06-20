@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-"""
-Internal API endpoints — protected by X-Internal-API-Secret header.
-Called by the LiveKit agent process, NOT by browser clients.
-"""
-
 import os
-import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.db.session import get_async_session
-from api.app.models.hospital.call import (
-    CallFeedback,
-    Escalation,
-    InboundCall,
-    OutboundCall,
-)
+from api.app.models.hospital.call import (CallFeedback, Escalation,
+                                          InboundCall, OutboundCall)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
 
@@ -30,7 +20,9 @@ def _check_secret(request: Request) -> None:
     expected = os.environ.get("INTERNAL_API_SHARED_SECRET", "")
     provided = request.headers.get("X-Internal-API-Secret", "")
     if not expected or provided != expected:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+        )
 
 
 def _normalize_phone(value: str) -> str:
@@ -61,15 +53,21 @@ async def patient_lookup_by_phone(
     suffix = normalized[-10:] if len(normalized) > 10 else normalized
 
     # Find patients matching this phone suffix
-    patients = (await session.execute(
-        select(Patient).where(
-            or_(
-                Patient.mobile_no.like(f"%{suffix}"),
-                Patient.mobile_no.like(f"%{normalized}"),
-                Patient.mobile_no == phone_number,
+    patients = (
+        (
+            await session.execute(
+                select(Patient).where(
+                    or_(
+                        Patient.mobile_no.like(f"%{suffix}"),
+                        Patient.mobile_no.like(f"%{normalized}"),
+                        Patient.mobile_no == phone_number,
+                    )
+                )
             )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     if not patients:
         return {"error": 1, "errorMsg": "Patient not found"}
@@ -79,53 +77,92 @@ async def patient_lookup_by_phone(
     # Org name lookup
     org_names = {
         o.id: o.name
-        for o in (await session.execute(
-            select(Organization).where(Organization.id.in_(org_ids))
-        )).scalars().all()
+        for o in (
+            await session.execute(
+                select(Organization).where(Organization.id.in_(org_ids))
+            )
+        )
+        .scalars()
+        .all()
     }
 
     patient_ids = [p.id for p in patients]
 
     # Previous appointments (patients with visit_date)
-    prev_appts = (await session.execute(
-        select(Patient).where(
-            or_(
-                Patient.mobile_no.like(f"%{suffix}"),
-                Patient.mobile_no.like(f"%{normalized}"),
-            ),
-            Patient.visit_date.isnot(None),
-        )
-        .order_by(Patient.visit_date.desc())
-    )).scalars().all()
-
-    # Outbound calls
-    outbound_calls = (await session.execute(
-        select(OutboundCall).where(OutboundCall.patient_id.in_(patient_ids))
-        .order_by(OutboundCall.started_at.desc())
-    )).scalars().all()
-
-    # Inbound calls matching phone
-    inbound_calls = (await session.execute(
-        select(InboundCall).where(
-            or_(
-                InboundCall.from_phone_number.like(f"%{suffix}"),
-                InboundCall.from_phone_number == phone_number,
+    prev_appts = (
+        (
+            await session.execute(
+                select(Patient)
+                .where(
+                    or_(
+                        Patient.mobile_no.like(f"%{suffix}"),
+                        Patient.mobile_no.like(f"%{normalized}"),
+                    ),
+                    Patient.visit_date.isnot(None),
+                )
+                .order_by(Patient.visit_date.desc())
             )
         )
-        .order_by(InboundCall.started_at.desc())
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
+
+    # Outbound calls
+    outbound_calls = (
+        (
+            await session.execute(
+                select(OutboundCall)
+                .where(OutboundCall.patient_id.in_(patient_ids))
+                .order_by(OutboundCall.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # Inbound calls matching phone
+    inbound_calls = (
+        (
+            await session.execute(
+                select(InboundCall)
+                .where(
+                    or_(
+                        InboundCall.from_phone_number.like(f"%{suffix}"),
+                        InboundCall.from_phone_number == phone_number,
+                    )
+                )
+                .order_by(InboundCall.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # Feedback
-    feedback = (await session.execute(
-        select(CallFeedback).where(CallFeedback.patient_id.in_(patient_ids))
-        .order_by(CallFeedback.created_at.desc())
-    )).scalars().all()
+    feedback = (
+        (
+            await session.execute(
+                select(CallFeedback)
+                .where(CallFeedback.patient_id.in_(patient_ids))
+                .order_by(CallFeedback.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # Escalations
-    escalations = (await session.execute(
-        select(Escalation).where(Escalation.patient_id.in_(patient_ids))
-        .order_by(Escalation.escalated_at.desc())
-    )).scalars().all()
+    escalations = (
+        (
+            await session.execute(
+                select(Escalation)
+                .where(Escalation.patient_id.in_(patient_ids))
+                .order_by(Escalation.escalated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     patient_data = [
         {
@@ -155,7 +192,9 @@ async def patient_lookup_by_phone(
                         "id": str(c.id),
                         "status": c.calling_process,
                         "calling_process": c.calling_process,
-                        "started_at": c.started_at.isoformat() if c.started_at else None,
+                        "started_at": (
+                            c.started_at.isoformat() if c.started_at else None
+                        ),
                         "ended_at": c.ended_at.isoformat() if c.ended_at else None,
                         "ended_reason": c.ended_reason,
                         "patient_name": p.patient_name,
@@ -171,7 +210,9 @@ async def patient_lookup_by_phone(
                         "id": str(c.id),
                         "status": c.calling_process,
                         "calling_process": c.calling_process,
-                        "started_at": c.started_at.isoformat() if c.started_at else None,
+                        "started_at": (
+                            c.started_at.isoformat() if c.started_at else None
+                        ),
                         "ended_at": c.ended_at.isoformat() if c.ended_at else None,
                         "from_phone_number": c.from_phone_number,
                         "department": c.department,
@@ -206,7 +247,9 @@ async def patient_lookup_by_phone(
                         "status": e.status,
                         "department": e.department,
                         "escalated_at": e.escalated_at.isoformat(),
-                        "resolved_at": e.resolved_at.isoformat() if e.resolved_at else None,
+                        "resolved_at": (
+                            e.resolved_at.isoformat() if e.resolved_at else None
+                        ),
                         "resolution_notes": e.resolution_notes,
                         "patient_name": p.patient_name,
                         "mobile_no": p.mobile_no,
@@ -287,19 +330,27 @@ async def agent_escalation(
 
     # Notify admin via WhatsApp (fire-and-forget)
     import asyncio
+
     from api.app.models.organization import Organization as Org
 
-    org_name = await session.scalar(
-        select(Org.name).where(Org.id == patient.organization_id)
-    ) or "Hospital"
+    org_name = (
+        await session.scalar(select(Org.name).where(Org.id == patient.organization_id))
+        or "Hospital"
+    )
 
     async def _notify() -> None:
         from api.app.services.whatsapp import send_whatsapp
+
         admin_phone = os.environ.get("ADMIN_PHONE", "+917032451866")
         await send_whatsapp(
             to_number=admin_phone,
             template_name="escalation_info",
-            template_params=[org_name, patient.mobile_no, issue_description, "Automated Escalation"],
+            template_params=[
+                org_name,
+                patient.mobile_no,
+                issue_description,
+                "Automated Escalation",
+            ],
         )
 
     try:

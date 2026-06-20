@@ -1,40 +1,38 @@
 from __future__ import annotations
 
-"""
-Celery tasks — all DB access uses async SQLAlchemy via asgiref.sync.async_to_sync.
-No Django ORM anywhere.
-"""
-
 import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone, time as dt_time
+from datetime import datetime
+from datetime import time as dt_time
+from datetime import timedelta, timezone
+from typing import Any, cast
 
 import boto3
 from asgiref.sync import async_to_sync
-from celery import shared_task
-from openai import OpenAI
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on import)
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
+from api.app.services.llm import llm_client, openrouter_model
+import redis as _redis_lib
 
 logger = logging.getLogger(__name__)
 
-# ── Shared OpenRouter client ─────────────────────────────────────────────────
-_openrouter_client = OpenAI(
-    api_key=settings.openrouter_api_key or settings.openai_api_key,
-    base_url="https://openrouter.ai/api/v1",
+_openrouter_client = llm_client()
+
+_redis_host = (
+    settings.redis_url.split("//")[-1].split(":")[0]
+    if "//" in settings.redis_url
+    else "redis"
 )
-
-# ── Redis for concurrency tracking ───────────────────────────────────────────
-import redis as _redis_lib
-
-_redis_host = settings.redis_url.split("//")[-1].split(":")[0] if "//" in settings.redis_url else "redis"
-_redis_port = int(settings.redis_url.split(":")[-1].split("/")[0]) if ":" in settings.redis_url else 6379
+_redis_port = (
+    int(settings.redis_url.split(":")[-1].split("/")[0])
+    if ":" in settings.redis_url
+    else 6379
+)
 
 redis_client = _redis_lib.StrictRedis(
     host=_redis_host, port=_redis_port, db=0, decode_responses=True
@@ -42,6 +40,7 @@ redis_client = _redis_lib.StrictRedis(
 CONCURRENCY_LIMIT = settings.call_concurrency_limit
 
 # ── Room name helpers ─────────────────────────────────────────────────────────
+
 
 def _is_inbound_room(room_name: str) -> bool:
     return room_name.startswith("inbound_")
@@ -58,19 +57,22 @@ def build_room_metadata(
     prompt: str = "",
 ) -> str:
     """Returns JSON string to embed in LiveKit Room Metadata."""
-    return json.dumps({
-        "organization_id": organization_id,
-        "hospital_name": hospital_name,
-        "agent_prompt_prefix": agent_prompt_prefix,
-        "type": call_type,
-        "phone_number": phone_number,
-        "patient_id": patient_id or "",
-        "campaign_id": campaign_id or "",
-        "prompt": prompt,
-    })
+    return json.dumps(
+        {
+            "organization_id": organization_id,
+            "hospital_name": hospital_name,
+            "agent_prompt_prefix": agent_prompt_prefix,
+            "type": call_type,
+            "phone_number": phone_number,
+            "patient_id": patient_id or "",
+            "campaign_id": campaign_id or "",
+            "prompt": prompt,
+        }
+    )
 
 
 # ── AI transcript analysis ────────────────────────────────────────────────────
+
 
 def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> dict:
     """
@@ -98,10 +100,13 @@ def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> d
     """
     try:
         response = _openrouter_client.chat.completions.create(
-            model=os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o"),
+            model=openrouter_model(),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze transcript:\n{text}\ncalled_at: {called_at}"},
+                {
+                    "role": "user",
+                    "content": f"Analyze transcript:\n{text}\ncalled_at: {called_at}",
+                },
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
@@ -118,6 +123,7 @@ def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> d
 
 # ── S3 helpers ────────────────────────────────────────────────────────────────
 
+
 def read_from_s3(bucket: str, key: str) -> dict:
     try:
         s3 = boto3.client(
@@ -126,12 +132,16 @@ def read_from_s3(bucket: str, key: str) -> dict:
             aws_secret_access_key=settings.aws_secret_access_key,
             region_name=settings.aws_region,
         )
-        return {"error": 0, "text": s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode()}
+        return {
+            "error": 0,
+            "text": s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode(),
+        }
     except Exception as exc:
         return {"error": 1, "errorMsg": str(exc)}
 
 
 # ── Async DB helpers ──────────────────────────────────────────────────────────
+
 
 async def _get_campaign(campaign_id: str):
     from api.app.models.hospital.campaign import Campaign
@@ -150,7 +160,9 @@ async def _get_org_and_config(organization_id: str):
             select(Organization).where(Organization.id == uuid.UUID(organization_id))
         )
         cfg = await session.scalar(
-            select(HospitalConfig).where(HospitalConfig.organization_id == uuid.UUID(organization_id))
+            select(HospitalConfig).where(
+                HospitalConfig.organization_id == uuid.UUID(organization_id)
+            )
         )
         return org, cfg
 
@@ -165,8 +177,8 @@ async def _get_patient(patient_id: str):
 
 
 async def _get_campaign_patients(campaign_id: str, organization_id: str) -> list:
-    from api.app.models.hospital.campaign import Campaign
     from api.app.models.hospital.call import OutboundCall
+    from api.app.models.hospital.campaign import Campaign
     from api.app.models.hospital.patient import Patient
 
     async with AsyncSessionLocal() as session:
@@ -182,8 +194,11 @@ async def _get_campaign_patients(campaign_id: str, organization_id: str) -> list
         if campaign.audience_type == "past_data":
             if campaign.start_date and campaign.end_date:
                 from sqlalchemy import func
+
                 q = q.where(
-                    func.date(Patient.uploaded_at).between(campaign.start_date, campaign.end_date)
+                    func.date(Patient.uploaded_at).between(
+                        campaign.start_date, campaign.end_date
+                    )
                 )
         elif campaign.audience_type == "upload":
             if campaign.patient_ids:
@@ -279,7 +294,9 @@ async def _create_call_feedback(
 
     async with AsyncSessionLocal() as session:
         try:
-            called_at = datetime.fromisoformat(called_at_str).replace(tzinfo=timezone.utc)
+            called_at = datetime.fromisoformat(called_at_str).replace(
+                tzinfo=timezone.utc
+            )
         except Exception:
             called_at = datetime.now(tz=timezone.utc)
 
@@ -303,13 +320,17 @@ async def _create_call_feedback(
             patient = await session.scalar(
                 select(Patient).where(Patient.id == uuid.UUID(patient_id))
             )
-            session.add(Escalation(
-                id=uuid.uuid4(),
-                organization_id=uuid.UUID(organization_id),
-                patient_id=uuid.UUID(patient_id),
-                issue_description=ai_result.get("remarks", "Agent-detected escalation"),
-                department=patient.department if patient else None,
-            ))
+            session.add(
+                Escalation(
+                    id=uuid.uuid4(),
+                    organization_id=uuid.UUID(organization_id),
+                    patient_id=uuid.UUID(patient_id),
+                    issue_description=ai_result.get(
+                        "remarks", "Agent-detected escalation"
+                    ),
+                    department=patient.department if patient else None,
+                )
+            )
 
         await session.commit()
 
@@ -320,47 +341,53 @@ async def _create_inbound_feedback(
     ai_result: dict,
     call_duration: float,
 ) -> None:
-    from api.app.models.hospital.call import (
-        InboundCall,
-        InboundCommunityEngagement,
-        InboundEscalation,
-        InboundFeedback,
-    )
+    from api.app.models.hospital.call import (InboundCall,
+                                              InboundCommunityEngagement,
+                                              InboundEscalation,
+                                              InboundFeedback)
 
     async with AsyncSessionLocal() as session:
         inbound_id = uuid.UUID(inbound_call_id)
         org_id = uuid.UUID(organization_id)
-        call = await session.scalar(select(InboundCall).where(InboundCall.id == inbound_id))
+        call = await session.scalar(
+            select(InboundCall).where(InboundCall.id == inbound_id)
+        )
 
-        session.add(InboundFeedback(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            inbound_call_id=inbound_id,
-            call_outcome=ai_result.get("call_outcome", "no_feedback"),
-            remarks=ai_result.get("remarks", ""),
-            community_added=ai_result.get("community_added", False),
-            revisit_encouraged=ai_result.get("revisit_encouraged", False),
-            escalation_required=ai_result.get("escalation_required", False),
-            call_duration=int(call_duration * 60),
-            called_by="Fettle Inbound Agent",
-        ))
-
-        session.add(InboundCommunityEngagement(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            inbound_call_id=inbound_id,
-            engagement_type=ai_result.get("call_outcome", "general_query"),
-            department=call.department if call else "General",
-        ))
-
-        if ai_result.get("escalation_required"):
-            session.add(InboundEscalation(
+        session.add(
+            InboundFeedback(
                 id=uuid.uuid4(),
                 organization_id=org_id,
                 inbound_call_id=inbound_id,
-                issue_description=ai_result.get("remarks", "Inbound Escalation"),
-                department=call.department if call else None,
-            ))
+                call_outcome=ai_result.get("call_outcome", "no_feedback"),
+                remarks=ai_result.get("remarks", ""),
+                community_added=ai_result.get("community_added", False),
+                revisit_encouraged=ai_result.get("revisit_encouraged", False),
+                escalation_required=ai_result.get("escalation_required", False),
+                call_duration=int(call_duration * 60),
+                called_by="Fettle Inbound Agent",
+            )
+        )
+
+        session.add(
+            InboundCommunityEngagement(
+                id=uuid.uuid4(),
+                organization_id=org_id,
+                inbound_call_id=inbound_id,
+                engagement_type=ai_result.get("call_outcome", "general_query"),
+                department=call.department if call else "General",
+            )
+        )
+
+        if ai_result.get("escalation_required"):
+            session.add(
+                InboundEscalation(
+                    id=uuid.uuid4(),
+                    organization_id=org_id,
+                    inbound_call_id=inbound_id,
+                    issue_description=ai_result.get("remarks", "Inbound Escalation"),
+                    department=call.department if call else None,
+                )
+            )
 
         await session.commit()
 
@@ -370,7 +397,9 @@ async def _update_inbound_call(call_id: str, **fields) -> None:
 
     async with AsyncSessionLocal() as session:
         await session.execute(
-            update(InboundCall).where(InboundCall.id == uuid.UUID(call_id)).values(**fields)
+            update(InboundCall)
+            .where(InboundCall.id == uuid.UUID(call_id))
+            .values(**fields)
         )
         await session.commit()
 
@@ -388,14 +417,15 @@ async def _get_user(user_id: str):
     from api.app.models.auth import User
 
     async with AsyncSessionLocal() as session:
-        return await session.scalar(
-            select(User).where(User.id == uuid.UUID(user_id))
-        )
+        return await session.scalar(select(User).where(User.id == uuid.UUID(user_id)))
 
 
 # ── Celery Tasks ──────────────────────────────────────────────────────────────
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def run_campaign_task(self, campaign_id: str):
     """Orchestrate a campaign: enqueue individual call tasks respecting concurrency limit."""
     from time import sleep
@@ -416,29 +446,41 @@ def run_campaign_task(self, campaign_id: str):
 
             # Respect concurrency ceiling
             while True:
-                active = int(redis_client.get("active_outbound_calls_count") or 0)
+                active = int(
+                    cast(Any, redis_client.get("active_outbound_calls_count")) or 0
+                )
                 if active < CONCURRENCY_LIMIT:
                     break
-                logger.debug("Concurrency limit (%d) reached. Waiting...", CONCURRENCY_LIMIT)
+                logger.debug(
+                    "Concurrency limit (%d) reached. Waiting...", CONCURRENCY_LIMIT
+                )
                 sleep(10)
 
             redis_client.incr("active_outbound_calls_count")
             redis_client.expire("active_outbound_calls_count", 300)
 
-            call_outbound_task.delay({
-                "organization_id": org_id,
-                "patient_id": str(patient_id),
-                "campaign_id": campaign_id,
-                "prompt": purpose,
-            })
+            call_outbound_task.delay(
+                {
+                    "organization_id": org_id,
+                    "patient_id": str(patient_id),
+                    "campaign_id": campaign_id,
+                    "prompt": purpose,
+                }
+            )
 
-        return {"status": "completed", "campaign_id": campaign_id, "count": len(patients)}
+        return {
+            "status": "completed",
+            "campaign_id": campaign_id,
+            "count": len(patients),
+        }
     except Exception as exc:
         logger.exception("run_campaign_task error")
         return {"error": 1, "msg": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def call_outbound_task(self, payload: dict):
     """Create OutboundCall record and dispatch via LiveKit SIP."""
     try:
@@ -466,23 +508,16 @@ def call_outbound_task(self, payload: dict):
 
         # Build room ID
         import time
+
         room_id = f"out_{patient_id or org_id}_{int(time.time())}_livekit"
 
         # Create OutboundCall record before dispatch
-        call_id = async_to_sync(_create_outbound_call)(org_id, patient_id, campaign_id, room_id)
-
-        metadata = build_room_metadata(
-            organization_id=org_id,
-            hospital_name=org.name,
-            agent_prompt_prefix=cfg.agent_prompt_prefix if cfg else "",
-            call_type="outbound",
-            phone_number=phone,
-            patient_id=patient_id,
-            campaign_id=campaign_id,
-            prompt=prompt,
+        call_id = async_to_sync(_create_outbound_call)(
+            org_id, patient_id, campaign_id, room_id
         )
 
         from api.app.services.livekit import dispatch_outbound_call_sync
+
         result = dispatch_outbound_call_sync(
             phone_number=phone,
             room_id=room_id,
@@ -500,7 +535,9 @@ def call_outbound_task(self, payload: dict):
             return {"error": 0, "call_id": call_id, "room_id": room_id}
         else:
             redis_client.decr("active_outbound_calls_count")
-            async_to_sync(_update_outbound_call)(call_id, status="failed", calling_process="not_connected")
+            async_to_sync(_update_outbound_call)(
+                call_id, status="failed", calling_process="not_connected"
+            )
             return result
 
     except Exception as exc:
@@ -509,7 +546,9 @@ def call_outbound_task(self, payload: dict):
         return {"error": 1, "msg": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def process_outbound_calls(self, json_payload: dict):
     """Pull S3 transcript, AI-analyze, create feedback records, update OutboundCall."""
     try:
@@ -530,7 +569,9 @@ def process_outbound_calls(self, json_payload: dict):
             transcript_data = json.loads(t_res["text"])
             metadata_data = json.loads(m_res["text"])
 
-        started_at = metadata_data.get("dialed_at") or metadata_data.get("started_at", "")
+        started_at = metadata_data.get("dialed_at") or metadata_data.get(
+            "started_at", ""
+        )
         ended_at = metadata_data.get("ended_at", "")
 
         text_message = "\n".join(
@@ -543,28 +584,49 @@ def process_outbound_calls(self, json_payload: dict):
         if started_at and ended_at:
             try:
                 call_duration = round(
-                    (datetime.fromisoformat(ended_at) - datetime.fromisoformat(started_at))
-                    .total_seconds() / 60,
+                    (
+                        datetime.fromisoformat(ended_at)
+                        - datetime.fromisoformat(started_at)
+                    ).total_seconds()
+                    / 60,
                     2,
                 )
             except Exception:
                 pass
 
-        ai_result = json_audio(patient_id or db_id, text_message, started_at, call_duration)
+        ai_result = json_audio(
+            patient_id or db_id, text_message, started_at, call_duration
+        )
 
-        if "error" not in ai_result and ai_result.get("call_status") == "connected" and patient_id:
+        if (
+            "error" not in ai_result
+            and ai_result.get("call_status") == "connected"
+            and patient_id
+        ):
             # Fetch organization_id from the call record
             call = async_to_sync(_get_outbound_call_by_room)(room_name)
             if call:
                 async_to_sync(_create_call_feedback)(
-                    str(call.organization_id), patient_id, ai_result, call_duration, started_at
+                    str(call.organization_id),
+                    patient_id,
+                    ai_result,
+                    call_duration,
+                    started_at,
                 )
 
         async_to_sync(_update_outbound_call)(
             db_id,
             status="ended",
-            started_at=datetime.fromisoformat(started_at).replace(tzinfo=timezone.utc) if started_at else None,
-            ended_at=datetime.fromisoformat(ended_at).replace(tzinfo=timezone.utc) if ended_at else None,
+            started_at=(
+                datetime.fromisoformat(started_at).replace(tzinfo=timezone.utc)
+                if started_at
+                else None
+            ),
+            ended_at=(
+                datetime.fromisoformat(ended_at).replace(tzinfo=timezone.utc)
+                if ended_at
+                else None
+            ),
             message_s3_link=f"s3://{s3_bucket}/transcripts/{room_name}.json",
             audio_s3_link=f"s3://{s3_bucket}/video_record/{room_name}.ogg",
             calling_process=ai_result.get("call_status", "not_connected"),
@@ -576,7 +638,9 @@ def process_outbound_calls(self, json_payload: dict):
         return {"error": 1, "msg": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def process_inbound_calls(self, json_payload: dict):
     """Pull S3 transcript for inbound call, AI-analyze, create feedback/escalation records."""
     try:
@@ -598,7 +662,9 @@ def process_inbound_calls(self, json_payload: dict):
             transcript_data = json.loads(t_res["text"])
             metadata_data = json.loads(m_res["text"])
 
-        started_at = metadata_data.get("dialed_at") or metadata_data.get("started_at", "")
+        started_at = metadata_data.get("dialed_at") or metadata_data.get(
+            "started_at", ""
+        )
         ended_at = metadata_data.get("ended_at", "")
 
         text_message = "\n".join(
@@ -611,14 +677,19 @@ def process_inbound_calls(self, json_payload: dict):
         if started_at and ended_at:
             try:
                 call_duration = round(
-                    (datetime.fromisoformat(ended_at) - datetime.fromisoformat(started_at))
-                    .total_seconds() / 60,
+                    (
+                        datetime.fromisoformat(ended_at)
+                        - datetime.fromisoformat(started_at)
+                    ).total_seconds()
+                    / 60,
                     2,
                 )
             except Exception:
                 pass
 
-        ai_result = json_audio(str(call.id), text_message, started_at or str(datetime.now()), call_duration)
+        ai_result = json_audio(
+            str(call.id), text_message, started_at or str(datetime.now()), call_duration
+        )
 
         if "error" not in ai_result and ai_result.get("call_status") == "connected":
             async_to_sync(_create_inbound_feedback)(
@@ -630,7 +701,11 @@ def process_inbound_calls(self, json_payload: dict):
             status="ended",
             message_s3_link=f"s3://{s3_bucket}/transcripts/{room_name}.json",
             audio_s3_link=f"s3://{s3_bucket}/video_record/{room_name}.ogg",
-            calling_process="connected" if ai_result.get("call_status") == "connected" else "not_connected",
+            calling_process=(
+                "connected"
+                if ai_result.get("call_status") == "connected"
+                else "not_connected"
+            ),
         )
         return {"status": "success", "id": str(call.id)}
 
@@ -639,7 +714,9 @@ def process_inbound_calls(self, json_payload: dict):
         return {"error": 1, "msg": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def send_prescription_notifications(self, session_id: str):
     """Send MediVoice consultation summary via WhatsApp to the patient."""
     try:
@@ -658,7 +735,9 @@ def send_prescription_notifications(self, session_id: str):
             parts = []
             for m in session.medicines:
                 if isinstance(m, dict):
-                    parts.append(f"- {m.get('name')} ({m.get('dosage', '')}, {m.get('duration', '')})")
+                    parts.append(
+                        f"- {m.get('name')} ({m.get('dosage', '')}, {m.get('duration', '')})"
+                    )
                 else:
                     parts.append(f"- {m}")
             if parts:
@@ -677,8 +756,10 @@ def send_prescription_notifications(self, session_id: str):
             f"For follow-ups, contact: {doctor.mobile_number or org.name}."
         )
 
-        from api.app.services.whatsapp import send_whatsapp
         import asyncio
+
+        from api.app.services.whatsapp import send_whatsapp
+
         asyncio.get_event_loop().run_until_complete(
             send_whatsapp(
                 to_number=session.patient_mobile,
@@ -693,7 +774,9 @@ def send_prescription_notifications(self, session_id: str):
         return {"status": "error", "message": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def reminder_task(self, session_id: str, reminder_type: str):
     """Send appointment reminder via WhatsApp (24h or 1h before revisit)."""
     try:
@@ -714,8 +797,10 @@ def reminder_task(self, session_id: str, reminder_type: str):
             f"Contact {doctor.mobile_number or org.name} for queries."
         )
 
-        from api.app.services.whatsapp import send_whatsapp
         import asyncio
+
+        from api.app.services.whatsapp import send_whatsapp
+
         asyncio.get_event_loop().run_until_complete(
             send_whatsapp(
                 to_number=session.patient_mobile,
@@ -730,7 +815,9 @@ def reminder_task(self, session_id: str, reminder_type: str):
         return {"status": "error", "message": str(exc)}
 
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
 def schedule_reminder_calls(self, session_id: str):
     """Schedule 24h and 1h ETA reminder tasks for a MediVoice revisit."""
     try:
@@ -739,7 +826,9 @@ def schedule_reminder_calls(self, session_id: str):
             return {"status": "skipped", "reason": "no revisit date"}
 
         revisit_time = session.revisit_time if session.revisit_time else dt_time(10, 0)
-        revisit_dt = datetime.combine(session.revisit_date, revisit_time).replace(tzinfo=timezone.utc)
+        revisit_dt = datetime.combine(session.revisit_date, revisit_time).replace(
+            tzinfo=timezone.utc
+        )
         now = datetime.now(tz=timezone.utc)
 
         eta_24h = revisit_dt - timedelta(hours=24)
@@ -750,7 +839,11 @@ def schedule_reminder_calls(self, session_id: str):
         if eta_1h > now:
             reminder_task.apply_async(args=[session_id, "1h"], eta=eta_1h)
 
-        return {"status": "scheduled", "session_id": session_id, "revisit": str(revisit_dt)}
+        return {
+            "status": "scheduled",
+            "session_id": session_id,
+            "revisit": str(revisit_dt),
+        }
     except Exception as exc:
         logger.exception("schedule_reminder_calls error")
         return {"status": "error", "message": str(exc)}

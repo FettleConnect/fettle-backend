@@ -83,7 +83,7 @@ jobs:
           VPS_PORT: ${{ secrets.STAGING_VPS_PORT }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "mkdir -p \"${APP_DIR}\""
           scp -P "${VPS_PORT:-22}" deploy/staging/docker-compose.staging.yml "$VPS_USER@$VPS_HOST:${APP_DIR}/docker-compose.staging.yml"
@@ -130,11 +130,11 @@ jobs:
           VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
           VPS_USER: ${{ secrets.STAGING_VPS_USER }}
           VPS_PORT: ${{ secrets.STAGING_VPS_PORT }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           printf '%s\n' \
             "API_IMAGE=${API_IMAGE}:${IMAGE_TAG}" \
@@ -150,7 +150,8 @@ jobs:
             "LIVEKIT_API_KEY=${LIVEKIT_API_KEY}" \
             "LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}" \
             "LIVEKIT_ROOM_NAME=default" \
-            "OPENAI_API_KEY=${OPENAI_API_KEY}" > .vps.env
+            "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
+            "OPENROUTER_MODEL=openai/gpt-4o" > .vps.env
 
           scp -P "${VPS_PORT:-22}" .vps.env "$VPS_USER@$VPS_HOST:${APP_DIR}/.env"
 

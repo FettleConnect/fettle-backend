@@ -8,12 +8,8 @@ from api.app.api.deps import get_current_user
 from api.app.core.security import create_access_token, verify_password
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.schemas.auth import (
-    LoginRequest,
-    TabAccessResponse,
-    TokenResponse,
-    ValidateTokenResponse,
-)
+from api.app.schemas.auth import (LoginRequest, TabAccessResponse,
+                                  TokenResponse, ValidateTokenResponse)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,7 +41,9 @@ async def login(
         role=user.role,
     )
 
-    permissions = _extract_permissions(user) if user.role in ("hospital_user", "doctor") else None
+    permissions = (
+        _extract_permissions(user) if user.role in ("hospital_user", "doctor") else None
+    )
 
     return TokenResponse(
         token=token,

@@ -1,64 +1,30 @@
 from __future__ import annotations
 
-"""
-Legacy-path compatibility layer for the dermatology chatbot.
-
-The frontend (fettle_oss_frontend) was built against the Django backend and
-calls these paths directly. Rather than rewriting the React app, we mount
-aliases here so the new FastAPI backend is a drop-in replacement.
-
-Alias map:
-  POST /auth/google/                  → patient auth (magic-link + Google OAuth)
-  GET  /api/validate_token/           → token validation (patient + doctor)
-  POST /api/login/                    → doctor / hospital login (legacy format)
-  GET  /api/doctor_tabs/              → doctor consultation tab list
-  POST /api/doctor_conversation/      → get conversation messages by thread
-  GET  /api/system_prompt/            → get doctor's custom system prompt
-  POST /api/system_prompt/            → save doctor's custom system prompt
-  POST /api/chat_view/                → patient chat message
-  GET  /api/chat_history/             → patient chat history
-  GET  /api/consultation_list/        → patient consultation list
-  POST /api/archive_consultation/     → archive consultation
-  POST /api/doctor_chat_view/         → doctor AI assistant
-  POST /api/doctor_send_response/     → doctor sends final response
-  POST /api/create-payment-intent/    → PayPal order creation
-  POST /api/capture_payment/          → PayPal order capture
-"""
-
 import base64
 import os
 import uuid
+from typing import Any, cast
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, File, status
+from fastapi import (APIRouter, Depends, HTTPException, Request)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.core.config import settings
-from api.app.core.security import (
-    TokenError,
-    create_access_token,
-    decode_token,
-    verify_password,
-)
+from api.app.api.v1.chatbot import (_DOCTOR_DRAFT_SYSTEM,
+                                    _chat_with_ai,
+                                    _create_patient_token,
+                                    _generate_doctor_draft,
+                                    _get_current_doctor, _get_current_patient,
+                                    _get_or_create_thread, _process_images)
+from api.app.core.security import (TokenError, create_access_token,
+                                   decode_token, verify_password)
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
+from api.app.models.hospital.dermatology import (DermatologyPatient,
+                                                 DermatologyThread)
 from api.app.models.organization import Organization
 from api.app.models.shared import GlobalConfig
-
-from api.app.api.v1.chatbot import (
-    _create_patient_token,
-    _get_current_patient,
-    _get_current_doctor,
-    _get_or_create_thread,
-    _chat_with_ai,
-    _generate_doctor_draft,
-    _process_images,
-    _GENERAL_EDUCATION_SYSTEM,
-    _DOCTOR_DRAFT_SYSTEM,
-)
 
 _GOOGLE_AUTH_ROUTER = APIRouter(tags=["auth-legacy"])
 _LEGACY_ROUTER = APIRouter(prefix="/api", tags=["legacy-compat"])
@@ -67,10 +33,12 @@ _bearer = HTTPBearer(auto_error=False)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _decode_google_jwt(token: str) -> dict | None:
     """Best-effort decode of a Google/Supabase JWT without signature verification."""
     try:
         import jwt as pyjwt
+
         return pyjwt.decode(token, options={"verify_signature": False})
     except Exception:
         return None
@@ -90,6 +58,7 @@ async def _get_caller(
 
 
 # ── POST /auth/google/ ────────────────────────────────────────────────────────
+
 
 class GoogleAuthIn(BaseModel):
     token: str | None = None
@@ -132,7 +101,8 @@ async def google_auth(
             pass
     if org_id is None:
         org = await session.scalar(
-            select(Organization).where(Organization.type == "hospital", Organization.is_active.is_(True))
+            select(Organization)
+            .where(Organization.type == "hospital", Organization.is_active.is_(True))
             .order_by(Organization.created_at)
         )
         if org:
@@ -162,6 +132,7 @@ async def google_auth(
 
 # ── GET /api/validate_token/ ──────────────────────────────────────────────────
 
+
 @_LEGACY_ROUTER.get("/validate_token/")
 async def validate_token_legacy(
     payload: dict | None = Depends(_get_caller),
@@ -172,15 +143,21 @@ async def validate_token_legacy(
 
     role = payload.get("role", "")
     user_id = payload.get("sub", "")
-    email = payload.get("email", "")
 
     if role == "patient":
         patient = await session.scalar(
-            select(DermatologyPatient).where(DermatologyPatient.id == uuid.UUID(user_id))
+            select(DermatologyPatient).where(
+                DermatologyPatient.id == uuid.UUID(user_id)
+            )
         )
         if not patient:
             raise HTTPException(status_code=401, detail="Patient not found")
-        return {"error": 0, "name": patient.name, "email": patient.email, "role": "patient"}
+        return {
+            "error": 0,
+            "name": patient.name,
+            "email": patient.email,
+            "role": "patient",
+        }
 
     # Doctor / hospital user
     user = await session.scalar(
@@ -207,6 +184,7 @@ async def validate_token_legacy(
 
 # ── POST /api/login/ ──────────────────────────────────────────────────────────
 
+
 class LegacyLoginIn(BaseModel):
     email: str
     password: str
@@ -228,17 +206,24 @@ async def legacy_login(
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    from datetime import timedelta
+
     token = create_access_token(
         user_id=user.id,
         email=user.email,
         organization_id=user.organization_id,
         role=user.role,
     )
-    return {"error": 0, "token": token, "msg": "Login successful", "role": user.role, "name": user.name}
+    return {
+        "error": 0,
+        "token": token,
+        "msg": "Login successful",
+        "role": user.role,
+        "name": user.name,
+    }
 
 
 # ── GET /api/doctor_tabs/ ─────────────────────────────────────────────────────
+
 
 @_LEGACY_ROUTER.get("/doctor_tabs/")
 async def doctor_tabs(
@@ -246,15 +231,20 @@ async def doctor_tabs(
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Doctor dashboard: paid threads in tab format expected by the frontend."""
-    threads = (await session.execute(
-        select(DermatologyThread, DermatologyPatient)
-        .join(DermatologyPatient, DermatologyThread.patient_id == DermatologyPatient.id)
-        .where(
-            DermatologyThread.organization_id == doctor.organization_id,
-            DermatologyThread.payment_status == "paid",
+    threads = (
+        await session.execute(
+            select(DermatologyThread, DermatologyPatient)
+            .join(
+                DermatologyPatient,
+                DermatologyThread.patient_id == DermatologyPatient.id,
+            )
+            .where(
+                DermatologyThread.organization_id == doctor.organization_id,
+                DermatologyThread.payment_status == "paid",
+            )
+            .order_by(DermatologyThread.updated_at.desc())
         )
-        .order_by(DermatologyThread.updated_at.desc())
-    )).all()
+    ).all()
 
     tabs = []
     for thread, patient in threads:
@@ -263,36 +253,39 @@ async def doctor_tabs(
         for url in intake.get("skin_images", []) + intake.get("report_images", []):
             if url not in all_images:
                 all_images.append(url)
-        for msg in (thread.conversation or []):
-            for url in (msg.get("images") or []):
+        for msg in thread.conversation or []:
+            for url in msg.get("images") or []:
                 if url not in all_images:
                     all_images.append(url)
 
-        tabs.append({
-            "id": str(thread.id),
-            "name": patient.name,
-            "email": patient.email,
-            "payment_status": thread.payment_status,
-            "active": thread.status == "active",
-            "intake_data": {
-                "duration": intake.get("duration", ""),
-                "symptoms": intake.get("symptoms", ""),
-                "location": intake.get("location", ""),
-                "medicationsTried": intake.get("meds", ""),
-                "relevantHealthHistory": intake.get("history", ""),
-                "images": all_images,
-            },
-            "doctor_draft": thread.draft_response or "",
-            "is_read": thread.mode != "dermatologist_review",
-            "updated_at": thread.updated_at.isoformat(),
-            "mode": thread.mode,
-            "messages": thread.conversation or [],
-        })
+        tabs.append(
+            {
+                "id": str(thread.id),
+                "name": patient.name,
+                "email": patient.email,
+                "payment_status": thread.payment_status,
+                "active": thread.status == "active",
+                "intake_data": {
+                    "duration": intake.get("duration", ""),
+                    "symptoms": intake.get("symptoms", ""),
+                    "location": intake.get("location", ""),
+                    "medicationsTried": intake.get("meds", ""),
+                    "relevantHealthHistory": intake.get("history", ""),
+                    "images": all_images,
+                },
+                "doctor_draft": thread.draft_response or "",
+                "is_read": thread.mode != "dermatologist_review",
+                "updated_at": thread.updated_at.isoformat(),
+                "mode": thread.mode,
+                "messages": thread.conversation or [],
+            }
+        )
 
     return {"error": 0, "tabs_doc": tabs}
 
 
 # ── POST /api/doctor_conversation/ ───────────────────────────────────────────
+
 
 class DoctorConvIn(BaseModel):
     id: str  # thread ID
@@ -316,6 +309,7 @@ async def doctor_conversation(
 
 
 # ── GET / POST /api/system_prompt/ ───────────────────────────────────────────
+
 
 @_LEGACY_ROUTER.get("/system_prompt/")
 async def get_system_prompt(
@@ -356,6 +350,7 @@ async def save_system_prompt(
 
 # ── Patient chat legacy aliases ───────────────────────────────────────────────
 
+
 @_LEGACY_ROUTER.get("/chat_history/")
 async def legacy_chat_history(
     thread_id: str | None = None,
@@ -391,6 +386,7 @@ async def legacy_chat_view(
 ) -> dict:
     """Delegates to the main chatbot chat handler."""
     from api.app.api.v1.chatbot import send_chat_message
+
     return await send_chat_message(request, patient, session)
 
 
@@ -399,11 +395,17 @@ async def legacy_consultation_list(
     patient: DermatologyPatient = Depends(_get_current_patient),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    threads = (await session.execute(
-        select(DermatologyThread)
-        .where(DermatologyThread.patient_id == patient.id)
-        .order_by(DermatologyThread.created_at.desc())
-    )).scalars().all()
+    threads = (
+        (
+            await session.execute(
+                select(DermatologyThread)
+                .where(DermatologyThread.patient_id == patient.id)
+                .order_by(DermatologyThread.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "error": 0,
@@ -429,7 +431,10 @@ async def legacy_archive(
 ) -> dict:
     await session.execute(
         update(DermatologyThread)
-        .where(DermatologyThread.patient_id == patient.id, DermatologyThread.status == "active")
+        .where(
+            DermatologyThread.patient_id == patient.id,
+            DermatologyThread.status == "active",
+        )
         .values(status="completed")
     )
     new_thread = DermatologyThread(
@@ -443,10 +448,15 @@ async def legacy_archive(
     )
     session.add(new_thread)
     await session.flush()
-    return {"error": 0, "thread_id": str(new_thread.id), "msg": "New consultation started"}
+    return {
+        "error": 0,
+        "thread_id": str(new_thread.id),
+        "msg": "New consultation started",
+    }
 
 
 # ── Doctor chat + respond legacy aliases ─────────────────────────────────────
+
 
 class LegacyDoctorChatIn(BaseModel):
     id: str
@@ -475,7 +485,11 @@ async def legacy_doctor_chat(
         draft = _generate_doctor_draft(thread)
         if draft:
             thread.draft_response = draft
-        return {"error": 0, "result": "Draft regenerated", "draft": thread.draft_response or ""}
+        return {
+            "error": 0,
+            "result": "Draft regenerated",
+            "draft": thread.draft_response or "",
+        }
 
     # Build context for the AI call
     system = body.systemPrompt or _DOCTOR_DRAFT_SYSTEM
@@ -490,7 +504,13 @@ async def legacy_doctor_chat(
         question = "\n\n".join(context_parts) + f"\n\nQuestion: {question}"
 
     ai_response = _chat_with_ai(system, thread.conversation or [], question)
-    return {"result": ai_response, "response": ai_response, "message": ai_response, "role": "ai", "error": 0}
+    return {
+        "result": ai_response,
+        "response": ai_response,
+        "message": ai_response,
+        "role": "ai",
+        "error": 0,
+    }
 
 
 @_LEGACY_ROUTER.post("/doctor_send_response/")
@@ -502,17 +522,17 @@ async def legacy_doctor_respond(
     content_type = request.headers.get("content-type", "")
     if "multipart" in content_type:
         form = await request.form()
-        conversation_id = form.get("id", "")
-        message = form.get("question", "")
+        conversation_id = str(form.get("id", "") or "")
+        message = str(form.get("question", "") or "")
         images = form.getlist("image")
     else:
         data = await request.json()
-        conversation_id = data.get("id", "")
-        message = data.get("question", "")
+        conversation_id = str(data.get("id", "") or "")
+        message = str(data.get("question", "") or "")
         images = []
 
     thread = await session.scalar(
-        select(DermatologyThread).where(
+        cast(Any, select(DermatologyThread)).where(
             DermatologyThread.id == uuid.UUID(conversation_id),
             DermatologyThread.organization_id == doctor.organization_id,
         )
@@ -549,10 +569,12 @@ CONSULTATION_PRICE_USD = float(os.environ.get("CONSULTATION_PRICE_USD", "15.00")
 
 async def _get_paypal_access_token() -> str:
     """Get a PayPal OAuth2 access token."""
-    import httpx
-    import base64
 
-    creds = base64.b64encode(f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()).decode()
+    import httpx
+
+    creds = base64.b64encode(
+        f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode()
+    ).decode()
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"{PAYPAL_API_BASE}/v1/oauth2/token",
@@ -584,6 +606,7 @@ async def create_payment_intent(
         return {"orderID": f"DEV-ORDER-{uuid.uuid4().hex[:12].upper()}"}
 
     import httpx
+
     try:
         access_token = await _get_paypal_access_token()
         async with httpx.AsyncClient(timeout=15) as client:
@@ -595,13 +618,15 @@ async def create_payment_intent(
                 },
                 json={
                     "intent": "CAPTURE",
-                    "purchase_units": [{
-                        "amount": {
-                            "currency_code": "USD",
-                            "value": f"{amount:.2f}",
-                        },
-                        "description": "Fettle Dermatology Consultation",
-                    }],
+                    "purchase_units": [
+                        {
+                            "amount": {
+                                "currency_code": "USD",
+                                "value": f"{amount:.2f}",
+                            },
+                            "description": "Fettle Dermatology Consultation",
+                        }
+                    ],
                 },
             )
             resp.raise_for_status()
@@ -639,6 +664,7 @@ async def capture_payment(
         return {"status": "COMPLETED", "orderID": body.orderID}
 
     import httpx
+
     try:
         access_token = await _get_paypal_access_token()
         async with httpx.AsyncClient(timeout=15) as client:
@@ -660,4 +686,6 @@ async def capture_payment(
 
         return {"status": data.get("status", "UNKNOWN"), "orderID": body.orderID}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"PayPal capture error: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"PayPal capture error: {exc}"
+        ) from exc

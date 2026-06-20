@@ -1,57 +1,46 @@
 from __future__ import annotations
 
-"""
-Outbound dashboard analytics — all aggregations done in SQL (no Python-side loops).
-Translates legacy app/views.py KPISummary, AdminDashboardView, Patientengagement,
-CommunityEngagement, RevisitAnalyticsAPIView, EscalationEngagement, fetchrecentactivity.
-"""
-
-import uuid
 from calendar import month_abbr
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Float, cast, func, select, text
+from sqlalchemy import Float, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.call import (
-    CallFeedback,
-    CommunityEngagement,
-    Escalation,
-    OutboundCall,
-)
+from api.app.models.hospital.call import (CallFeedback, CommunityEngagement,
+                                          Escalation, OutboundCall)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
-from api.app.schemas.hospital.dashboard import (
-    AdminDashboardResponse,
-    CallAnswerItem,
-    CommunityEngagementMeta,
-    CommunityEngagementMetrics,
-    CommunityEngagementResponse,
-    CommunityGrowthPoint,
-    ContactDataPoint,
-    DeptEngagementItem,
-    DeptEscalationItem,
-    DeptRevisitItem,
-    EscalationEngagementResponse,
-    EscalationIssue,
-    EscalationMeta,
-    KPICard,
-    KPISummaryResponse,
-    MonthlyRevisitPoint,
-    PatientEngagementMeta,
-    PatientEngagementResponse,
-    RecentActivityResponse,
-    RecentEscalation,
-    ResolutionStatusItem,
-    RevisitAnalyticsResponse,
-    TimeGapItem,
-)
+from api.app.schemas.hospital.dashboard import (AdminDashboardResponse,
+                                                CallAnswerItem,
+                                                CommunityEngagementMeta,
+                                                CommunityEngagementMetrics,
+                                                CommunityEngagementResponse,
+                                                CommunityGrowthPoint,
+                                                ContactDataPoint,
+                                                DeptEngagementItem,
+                                                DeptEscalationItem,
+                                                DeptRevisitItem,
+                                                EscalationEngagementResponse,
+                                                EscalationIssue,
+                                                EscalationMeta,
+                                                FeedbackDistItem,
+                                                FeedbackPatient, KPICard,
+                                                KPISummaryResponse,
+                                                MonthlyRevisitPoint,
+                                                PatientEngagementMeta,
+                                                PatientEngagementResponse,
+                                                PatientIntent,
+                                                RecentActivityResponse,
+                                                RecentEscalation,
+                                                ResolutionStatusItem,
+                                                RevisitAnalyticsResponse,
+                                                TimeGapItem)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard-outbound"])
 
@@ -92,7 +81,9 @@ async def kpi_summary(
     start_of_this_week = today - timedelta(days=today.weekday())
     start_of_last_week = start_of_this_week - timedelta(days=7)
 
-    async def _count_feedback(start: date, end: date, call_status: str | None = None) -> int:
+    async def _count_feedback(
+        start: date, end: date, call_status: str | None = None
+    ) -> int:
         q = (
             select(func.count(CallFeedback.id))
             .join(Patient, CallFeedback.patient_id == Patient.id)
@@ -107,27 +98,35 @@ async def kpi_summary(
         return (await session.scalar(q)) or 0
 
     async def _count_escalations(start: date, end: date) -> int:
-        return (await session.scalar(
-            select(func.count(Escalation.id))
-            .join(Patient, Escalation.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(Escalation.escalated_at) >= start,
-                func.date(Escalation.escalated_at) <= end,
+        return (
+            await session.scalar(
+                select(func.count(Escalation.id))
+                .join(Patient, Escalation.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(Escalation.escalated_at) >= start,
+                    func.date(Escalation.escalated_at) <= end,
+                )
             )
-        )) or 0
+        ) or 0
 
     # KPI 1: Total patients contacted
     contact_this_week = await _count_feedback(start_of_this_week, today)
-    contact_last_week = await _count_feedback(start_of_last_week, start_of_this_week - timedelta(days=1))
-    total_contacts = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )) or 0
+    contact_last_week = await _count_feedback(
+        start_of_last_week, start_of_this_week - timedelta(days=1)
+    )
+    total_contacts = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
     if contact_last_week > 0:
-        contact_change = (contact_this_week - contact_last_week) / contact_last_week * 100
+        contact_change = (
+            (contact_this_week - contact_last_week) / contact_last_week * 100
+        )
         contact_trend = "up" if contact_change > 0 else "down"
     else:
         contact_change = 100.0 if contact_this_week > 0 else 0.0
@@ -135,62 +134,94 @@ async def kpi_summary(
 
     # KPI 2: Call answer rate
     connected_this_week = await _count_feedback(start_of_this_week, today, "connected")
-    connected_last_week = await _count_feedback(start_of_last_week, start_of_this_week - timedelta(days=1), "connected")
-    total_connected = (await session.scalar(
-        select(func.count(func.distinct(CallFeedback.patient_id)))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id, CallFeedback.call_status == "connected")
-    )) or 0
+    connected_last_week = await _count_feedback(
+        start_of_last_week, start_of_this_week - timedelta(days=1), "connected"
+    )
+    total_connected = (
+        await session.scalar(
+            select(func.count(func.distinct(CallFeedback.patient_id)))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+            )
+        )
+    ) or 0
 
-    rate_this_week = (connected_this_week / contact_this_week * 100) if contact_this_week else 0
-    rate_last_week = (connected_last_week / contact_last_week * 100) if contact_last_week else 0
+    rate_this_week = (
+        (connected_this_week / contact_this_week * 100) if contact_this_week else 0
+    )
+    rate_last_week = (
+        (connected_last_week / contact_last_week * 100) if contact_last_week else 0
+    )
     connect_change = rate_this_week - rate_last_week
-    connect_trend = "up" if connect_change > 0 else ("down" if connect_change < 0 else "flat")
-    answer_rate = _round2((total_connected / total_contacts * 100) if total_contacts else 0)
+    connect_trend = (
+        "up" if connect_change > 0 else ("down" if connect_change < 0 else "flat")
+    )
+    answer_rate = _round2(
+        (total_connected / total_contacts * 100) if total_contacts else 0
+    )
 
     # KPI 3: Community conversion
-    comm_this_week = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            CallFeedback.call_status == "connected",
-            CallFeedback.community_added.is_(True),
-            func.date(CallFeedback.called_at) >= start_of_this_week,
-            func.date(CallFeedback.called_at) <= today,
+    comm_this_week = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+                CallFeedback.community_added.is_(True),
+                func.date(CallFeedback.called_at) >= start_of_this_week,
+                func.date(CallFeedback.called_at) <= today,
+            )
         )
-    )) or 0
-    comm_last_week = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            CallFeedback.call_status == "connected",
-            CallFeedback.community_added.is_(True),
-            func.date(CallFeedback.called_at) >= start_of_last_week,
-            func.date(CallFeedback.called_at) < start_of_this_week,
+    ) or 0
+    comm_last_week = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+                CallFeedback.community_added.is_(True),
+                func.date(CallFeedback.called_at) >= start_of_last_week,
+                func.date(CallFeedback.called_at) < start_of_this_week,
+            )
         )
-    )) or 0
-    total_comm = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id, CallFeedback.community_added.is_(True))
-    )) or 0
+    ) or 0
+    total_comm = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.community_added.is_(True),
+            )
+        )
+    ) or 0
     comm_rate = _round2((total_comm / total_contacts * 100) if total_contacts else 0)
 
-    comm_rate_tw = (comm_this_week / connected_this_week * 100) if connected_this_week else 0
-    comm_rate_lw = (comm_last_week / connected_last_week * 100) if connected_last_week else 0
+    comm_rate_tw = (
+        (comm_this_week / connected_this_week * 100) if connected_this_week else 0
+    )
+    comm_rate_lw = (
+        (comm_last_week / connected_last_week * 100) if connected_last_week else 0
+    )
     comm_change = comm_rate_tw - comm_rate_lw
     comm_trend = "up" if comm_change > 0 else ("down" if comm_change < 0 else "flat")
 
     # KPI 4: Escalations
     esc_this_week = await _count_escalations(start_of_this_week, today)
-    esc_last_week = await _count_escalations(start_of_last_week, start_of_this_week - timedelta(days=1))
-    total_esc = (await session.scalar(
-        select(func.count(Escalation.id))
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )) or 0
+    esc_last_week = await _count_escalations(
+        start_of_last_week, start_of_this_week - timedelta(days=1)
+    )
+    total_esc = (
+        await session.scalar(
+            select(func.count(Escalation.id))
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
     if esc_last_week > 0:
         esc_change = (esc_this_week - esc_last_week) / esc_last_week * 100
@@ -243,52 +274,76 @@ async def admin_dashboard(
     org_id = current_user.organization_id
 
     # All counts in one CTE-style set of scalar queries
-    patients_count = (await session.scalar(
-        select(func.count(Patient.id)).where(Patient.organization_id == org_id)
-    )) or 0
+    patients_count = (
+        await session.scalar(
+            select(func.count(Patient.id)).where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
-    call_count = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )) or 0
+    call_count = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
-    esc_count = (await session.scalar(
-        select(func.count(Escalation.id))
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )) or 0
+    esc_count = (
+        await session.scalar(
+            select(func.count(Escalation.id))
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
-    connected_calls = (await session.scalar(
-        select(func.count(CallFeedback.id))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id, CallFeedback.call_status == "connected")
-    )) or 0
+    connected_calls = (
+        await session.scalar(
+            select(func.count(CallFeedback.id))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+            )
+        )
+    ) or 0
 
-    community_added = (await session.scalar(
-        select(func.count(CommunityEngagement.id))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )) or 0
+    community_added = (
+        await session.scalar(
+            select(func.count(CommunityEngagement.id))
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+        )
+    ) or 0
 
-    call_answer_rate = _round2((connected_calls / call_count * 100) if call_count else 0)
+    call_answer_rate = _round2(
+        (connected_calls / call_count * 100) if call_count else 0
+    )
 
     # Connected distinct patients who were added to community
-    connected_and_added = (await session.scalar(
-        select(func.count(func.distinct(CallFeedback.patient_id)))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            CallFeedback.call_status == "connected",
-            CallFeedback.community_added.is_(True),
+    connected_and_added = (
+        await session.scalar(
+            select(func.count(func.distinct(CallFeedback.patient_id)))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+                CallFeedback.community_added.is_(True),
+            )
         )
-    )) or 0
-    connected_distinct = (await session.scalar(
-        select(func.count(func.distinct(CallFeedback.patient_id)))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id, CallFeedback.call_status == "connected")
-    )) or 0
-    community_conversion = _round2((connected_and_added / connected_distinct * 100) if connected_distinct else 0)
+    ) or 0
+    connected_distinct = (
+        await session.scalar(
+            select(func.count(func.distinct(CallFeedback.patient_id)))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CallFeedback.call_status == "connected",
+            )
+        )
+    ) or 0
+    community_conversion = _round2(
+        (connected_and_added / connected_distinct * 100) if connected_distinct else 0
+    )
 
     return AdminDashboardResponse(
         patientsCount=patients_count,
@@ -317,32 +372,37 @@ async def patient_engagement(
     # Contacts data — group by month if >60 days, else by day
     if delta > 60:
         period_col = func.date_trunc("month", OutboundCall.started_at).label("period")
-        rows = (await session.execute(
-            select(period_col, func.count(OutboundCall.id).label("contacts"))
-            .join(Patient, OutboundCall.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(OutboundCall.started_at).between(start, today),
+        rows = (
+            await session.execute(
+                select(period_col, func.count(OutboundCall.id).label("contacts"))
+                .join(Patient, OutboundCall.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(OutboundCall.started_at).between(start, today),
+                )
+                .group_by(period_col)
+                .order_by(period_col)
             )
-            .group_by(period_col)
-            .order_by(period_col)
-        )).all()
+        ).all()
         contacts_data = [
             ContactDataPoint(date=r.period.strftime("%b %Y"), contacts=r.contacts)
-            for r in rows if r.period
+            for r in rows
+            if r.period
         ]
     else:
         period_col = func.date_trunc("day", OutboundCall.started_at).label("period")
-        rows = (await session.execute(
-            select(period_col, func.count(OutboundCall.id).label("contacts"))
-            .join(Patient, OutboundCall.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(OutboundCall.started_at).between(start, today),
+        rows = (
+            await session.execute(
+                select(period_col, func.count(OutboundCall.id).label("contacts"))
+                .join(Patient, OutboundCall.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(OutboundCall.started_at).between(start, today),
+                )
+                .group_by(period_col)
+                .order_by(period_col)
             )
-            .group_by(period_col)
-            .order_by(period_col)
-        )).all()
+        ).all()
         day_map: dict[str, int] = {
             (start + timedelta(days=i)).strftime("%Y-%m-%d"): 0
             for i in range(delta + 1)
@@ -359,18 +419,22 @@ async def patient_engagement(
         ]
 
     # Feedback aggregate
-    total, answered, avg_duration = (await session.execute(
-        select(
-            func.count(CallFeedback.id).label("total"),
-            func.count(CallFeedback.id).filter(CallFeedback.call_status == "connected").label("answered"),
-            func.avg(cast(CallFeedback.call_duration, Float)).label("avg_dur"),
+    total, answered, avg_duration = (
+        await session.execute(
+            select(
+                func.count(CallFeedback.id).label("total"),
+                func.count(CallFeedback.id)
+                .filter(CallFeedback.call_status == "connected")
+                .label("answered"),
+                func.avg(cast(CallFeedback.call_duration, Float)).label("avg_dur"),
+            )
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(CallFeedback.called_at).between(start, today),
+            )
         )
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(CallFeedback.called_at).between(start, today),
-        )
-    )).one()
+    ).one()
 
     total = total or 0
     answered = answered or 0
@@ -380,7 +444,9 @@ async def patient_engagement(
         contactsData=contacts_data,
         callAnswerData=[
             CallAnswerItem(name="Answered", value=answer_pct, color="#10B981"),
-            CallAnswerItem(name="Not Answered", value=_round2(100 - answer_pct), color="#EF4444"),
+            CallAnswerItem(
+                name="Not Answered", value=_round2(100 - answer_pct), color="#EF4444"
+            ),
         ],
         metadata=PatientEngagementMeta(
             total_calls_all_period=total,
@@ -404,18 +470,20 @@ async def community_engagement(
     start_of_this_week = today - timedelta(days=today.weekday())
     week_starts = [start_of_this_week - timedelta(weeks=i) for i in reversed(range(12))]
 
-    week_rows = (await session.execute(
-        select(
-            func.date_trunc("week", CommunityEngagement.created_at).label("week"),
-            func.count(CommunityEngagement.id).label("added"),
+    week_rows = (
+        await session.execute(
+            select(
+                func.date_trunc("week", CommunityEngagement.created_at).label("week"),
+                func.count(CommunityEngagement.id).label("added"),
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(CommunityEngagement.created_at) >= week_starts[0],
+            )
+            .group_by("week")
         )
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(CommunityEngagement.created_at) >= week_starts[0],
-        )
-        .group_by("week")
-    )).all()
+    ).all()
 
     week_map: dict[date, int] = {ws: 0 for ws in week_starts}
     for r in week_rows:
@@ -430,137 +498,175 @@ async def community_engagement(
     ]
 
     # Department engagement
-    dept_rows = (await session.execute(
-        select(CommunityEngagement.department, func.count(CommunityEngagement.id).label("engagement"))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            CommunityEngagement.department.isnot(None),
-            CommunityEngagement.department != "",
-            func.date(CommunityEngagement.created_at).between(start, today),
+    dept_rows = (
+        await session.execute(
+            select(
+                CommunityEngagement.department,
+                func.count(CommunityEngagement.id).label("engagement"),
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CommunityEngagement.department.isnot(None),
+                CommunityEngagement.department != "",
+                func.date(CommunityEngagement.created_at).between(start, today),
+            )
+            .group_by(CommunityEngagement.department)
+            .order_by(func.count(CommunityEngagement.id).desc())
         )
-        .group_by(CommunityEngagement.department)
-        .order_by(func.count(CommunityEngagement.id).desc())
-    )).all()
-    dept_data = [DeptEngagementItem(department=r.department, engagement=r.engagement) for r in dept_rows]
+    ).all()
+    dept_data = [
+        DeptEngagementItem(department=r.department, engagement=r.engagement)
+        for r in dept_rows
+    ]
 
     # Metadata aggregations
-    total_eng, total_posts = (await session.execute(
-        select(
-            func.count(CommunityEngagement.id).label("total"),
-            func.count(CommunityEngagement.id).filter(
-                CommunityEngagement.engagement_type == "post"
-            ).label("posts"),
+    total_eng, total_posts = (
+        await session.execute(
+            select(
+                func.count(CommunityEngagement.id).label("total"),
+                func.count(CommunityEngagement.id)
+                .filter(CommunityEngagement.engagement_type == "post")
+                .label("posts"),
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
         )
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )).one()
+    ).one()
     total_eng = total_eng or 0
     total_posts = total_posts or 0
     avg_per_post = _round2((total_eng / total_posts) if total_posts else 0)
 
-    posts_this_week = (await session.scalar(
-        select(func.count(CommunityEngagement.id))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            CommunityEngagement.engagement_type == "post",
-            func.date(CommunityEngagement.engagement_date) >= start_of_this_week,
+    posts_this_week = (
+        await session.scalar(
+            select(func.count(CommunityEngagement.id))
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                CommunityEngagement.engagement_type == "post",
+                func.date(CommunityEngagement.engagement_date) >= start_of_this_week,
+            )
         )
-    )) or 0
+    ) or 0
 
     start_of_month = today.replace(day=1)
-    new_members = (await session.scalar(
-        select(func.count(func.distinct(CommunityEngagement.patient_id)))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(CommunityEngagement.engagement_date) >= start_of_month,
+    new_members = (
+        await session.scalar(
+            select(func.count(func.distinct(CommunityEngagement.patient_id)))
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(CommunityEngagement.engagement_date) >= start_of_month,
+            )
         )
-    )) or 0
+    ) or 0
 
     # Conversion rate
-    conn_and_added, conn_total = (await session.execute(
-        select(
-            func.count(CallFeedback.id).filter(
-                CallFeedback.call_status == "connected",
-                CallFeedback.community_added.is_(True),
-            ).label("added"),
-            func.count(CallFeedback.id).filter(
-                CallFeedback.call_status == "connected"
-            ).label("connected"),
+    conn_and_added, conn_total = (
+        await session.execute(
+            select(
+                func.count(CallFeedback.id)
+                .filter(
+                    CallFeedback.call_status == "connected",
+                    CallFeedback.community_added.is_(True),
+                )
+                .label("added"),
+                func.count(CallFeedback.id)
+                .filter(CallFeedback.call_status == "connected")
+                .label("connected"),
+            )
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
         )
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-    )).one()
+    ).one()
     conn_and_added = conn_and_added or 0
     conn_total = conn_total or 0
     conversion_rate = _round2((conn_and_added / conn_total * 100) if conn_total else 0)
 
     # Weekly active users
-    weekly_active = (await session.scalar(
-        select(func.count(func.distinct(CommunityEngagement.patient_id)))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(CommunityEngagement.engagement_date) >= today - timedelta(days=7),
-        )
-    )) or 0
-
-    # Feedback distribution — group by outcome in SQL
-    fb_rows = (await session.execute(
-        select(CallFeedback.call_outcome, func.count(CallFeedback.id).label("cnt"))
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id, CallFeedback.call_outcome.isnot(None))
-        .group_by(CallFeedback.call_outcome)
-        .order_by(func.count(CallFeedback.id).desc())
-    )).all()
-
-    # For each outcome, fetch top 10 patients with remarks
-    feedback_dist = []
-    for fb_row in fb_rows:
-        outcome = fb_row.call_outcome
-        detail_rows = (await session.execute(
-            select(Patient.patient_name, CallFeedback.called_at, CallFeedback.remarks)
-            .join(Patient, CallFeedback.patient_id == Patient.id)
+    weekly_active = (
+        await session.scalar(
+            select(func.count(func.distinct(CommunityEngagement.patient_id)))
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
             .where(
                 Patient.organization_id == org_id,
-                CallFeedback.call_outcome == outcome,
-                CallFeedback.remarks.isnot(None),
+                func.date(CommunityEngagement.engagement_date)
+                >= today - timedelta(days=7),
             )
-            .order_by(CallFeedback.called_at.desc())
-            .limit(10)
-        )).all()
-        feedback_dist.append({
-            "name": outcome.replace("_", " ").title(),
-            "value": fb_row.cnt,
-            "patients": [
-                {
-                    "name": d.patient_name,
-                    "date": d.called_at.strftime("%Y-%m-%d") if d.called_at else "N/A",
-                    "feedback": d.remarks or "No remarks provided.",
-                }
-                for d in detail_rows
-            ],
-        })
+        )
+    ) or 0
+
+    # Feedback distribution — group by outcome in SQL
+    fb_rows = (
+        await session.execute(
+            select(CallFeedback.call_outcome, func.count(CallFeedback.id).label("cnt"))
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id, CallFeedback.call_outcome.isnot(None)
+            )
+            .group_by(CallFeedback.call_outcome)
+            .order_by(func.count(CallFeedback.id).desc())
+        )
+    ).all()
+
+    # For each outcome, fetch top 10 patients with remarks
+    feedback_dist: list[FeedbackDistItem] = []
+    for fb_row in fb_rows:
+        outcome = fb_row.call_outcome
+        detail_rows = (
+            await session.execute(
+                select(
+                    Patient.patient_name, CallFeedback.called_at, CallFeedback.remarks
+                )
+                .join(Patient, CallFeedback.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    CallFeedback.call_outcome == outcome,
+                    CallFeedback.remarks.isnot(None),
+                )
+                .order_by(CallFeedback.called_at.desc())
+                .limit(10)
+            )
+        ).all()
+        feedback_dist.append(
+            FeedbackDistItem(
+                name=outcome.replace("_", " ").title(),
+                value=fb_row.cnt,
+                patients=[
+                    FeedbackPatient(
+                        name=d.patient_name,
+                        date=d.called_at.strftime("%Y-%m-%d")
+                        if d.called_at
+                        else "N/A",
+                        feedback=d.remarks or "No remarks provided.",
+                    )
+                    for d in detail_rows
+                ],
+            )
+        )
 
     # Patient intents from community engagement types
-    intent_rows = (await session.execute(
-        select(CommunityEngagement.engagement_type, func.count(CommunityEngagement.id).label("cnt"))
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-        .group_by(CommunityEngagement.engagement_type)
-        .order_by(func.count(CommunityEngagement.id).desc())
-    )).all()
+    intent_rows = (
+        await session.execute(
+            select(
+                CommunityEngagement.engagement_type,
+                func.count(CommunityEngagement.id).label("cnt"),
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+            .group_by(CommunityEngagement.engagement_type)
+            .order_by(func.count(CommunityEngagement.id).desc())
+        )
+    ).all()
 
     patient_intents = [
-        {
-            "name": r.engagement_type.replace("_", " ").title(),
-            "value": r.cnt,
-            "intent": r.engagement_type.replace("_", " ").title(),
-            "count": r.cnt,
-            "patients": [],
-        }
+        PatientIntent(
+            name=r.engagement_type.replace("_", " ").title(),
+            value=r.cnt,
+            intent=r.engagement_type.replace("_", " ").title(),
+            count=r.cnt,
+            patients=[],
+        )
         for r in intent_rows
     ]
 
@@ -595,15 +701,17 @@ async def revisit_analytics(
     start = start_date or (today - timedelta(days=730))
 
     # Fetch distinct (mobile_no, department, date) visit records from patients
-    rows = (await session.execute(
-        select(Patient.mobile_no, Patient.department, Patient.visit_date)
-        .where(
-            Patient.organization_id == org_id,
-            Patient.visit_date.isnot(None),
-            Patient.visit_date.between(start, today),
+    rows = (
+        await session.execute(
+            select(Patient.mobile_no, Patient.department, Patient.visit_date)
+            .where(
+                Patient.organization_id == org_id,
+                Patient.visit_date.isnot(None),
+                Patient.visit_date.between(start, today),
+            )
+            .distinct()
         )
-        .distinct()
-    )).all()
+    ).all()
 
     # Build visit map — (mobile_no, dept) → set of visit dates
     visit_map: dict[tuple, set] = defaultdict(set)
@@ -611,10 +719,14 @@ async def revisit_analytics(
         visit_map[(r.mobile_no, r.department or "")].add(r.visit_date)
 
     _DEPT_COLORS = {
-        "Cardiology": "#EF4444", "Orthopedics": "#F59E0B",
-        "Pediatrics": "#10B981", "General Medicine": "#3B82F6",
-        "Dental": "#8B5CF6", "Dermatology": "#EC4899",
-        "Neurology": "#6366F1", "ENT": "#14B8A6",
+        "Cardiology": "#EF4444",
+        "Orthopedics": "#F59E0B",
+        "Pediatrics": "#10B981",
+        "General Medicine": "#3B82F6",
+        "Dental": "#8B5CF6",
+        "Dermatology": "#EC4899",
+        "Neurology": "#6366F1",
+        "ENT": "#14B8A6",
     }
 
     dept_counter: Counter = Counter()
@@ -664,23 +776,30 @@ async def revisit_analytics(
     curr = date(start.year, start.month, 1)
     monthly_data: list[MonthlyRevisitPoint] = []
     while curr <= today:
-        monthly_data.append(MonthlyRevisitPoint(
-            month=f"{month_abbr[curr.month]} {str(curr.year)[2:]}",
-            revisits=monthly_counter.get((curr.year, curr.month), 0),
-        ))
+        monthly_data.append(
+            MonthlyRevisitPoint(
+                month=f"{month_abbr[curr.month]} {str(curr.year)[2:]}",
+                revisits=monthly_counter.get((curr.year, curr.month), 0),
+            )
+        )
         if curr.month == 12:
             curr = curr.replace(year=curr.year + 1, month=1)
         else:
             curr = curr.replace(month=curr.month + 1)
 
     gap_order = ["0-7 days", "8-30 days", "1-3 months", "3-6 months", "6+ months"]
-    time_gap_data = [TimeGapItem(gap=label, count=time_gap_counter.get(label, 0)) for label in gap_order]
+    time_gap_data = [
+        TimeGapItem(gap=label, count=time_gap_counter.get(label, 0))
+        for label in gap_order
+    ]
 
     return RevisitAnalyticsResponse(
         department_data=dept_data,
         monthly_trend=monthly_data,
         time_gap_distribution=time_gap_data,
-        average_revisit_gap=round(sum(all_gaps) / len(all_gaps), 2) if all_gaps else None,
+        average_revisit_gap=(
+            round(sum(all_gaps) / len(all_gaps), 2) if all_gaps else None
+        ),
         repeat_visits_this_month=repeat_visits_this_month,
     )
 
@@ -697,21 +816,23 @@ async def escalation_engagement(
     start = start_date or (today - timedelta(days=90))
 
     # Department escalation counts + issue details
-    dept_rows = (await session.execute(
-        select(
-            Escalation.department,
-            Escalation.issue_description,
-            Patient.patient_name,
-            Patient.mobile_no,
+    dept_rows = (
+        await session.execute(
+            select(
+                Escalation.department,
+                Escalation.issue_description,
+                Patient.patient_name,
+                Patient.mobile_no,
+            )
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                Escalation.department.isnot(None),
+                Escalation.department != "",
+                func.date(Escalation.escalated_at).between(start, today),
+            )
         )
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            Escalation.department.isnot(None),
-            Escalation.department != "",
-            func.date(Escalation.escalated_at).between(start, today),
-        )
-    )).all()
+    ).all()
 
     dept_dict: dict[str, list] = defaultdict(list)
     for r in dept_rows:
@@ -725,50 +846,70 @@ async def escalation_engagement(
             )
     dept_esc_data = [
         DeptEscalationItem(department=dept, count=len(issues), issues=issues)
-        for dept, issues in sorted(dept_dict.items(), key=lambda x: len(x[1]), reverse=True)
+        for dept, issues in sorted(
+            dept_dict.items(), key=lambda x: len(x[1]), reverse=True
+        )
     ]
 
     # Resolution status
-    status_rows = (await session.execute(
-        select(Escalation.status, func.count(Escalation.id).label("cnt"))
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(Escalation.escalated_at).between(start, today),
+    status_rows = (
+        await session.execute(
+            select(Escalation.status, func.count(Escalation.id).label("cnt"))
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(Escalation.escalated_at).between(start, today),
+            )
+            .group_by(Escalation.status)
         )
-        .group_by(Escalation.status)
-    )).all()
+    ).all()
 
-    _STATUS_COLORS = {"resolved": "#10B981", "in-progress": "#F59E0B", "pending": "#EF4444"}
+    _STATUS_COLORS = {
+        "resolved": "#10B981",
+        "in-progress": "#F59E0B",
+        "pending": "#EF4444",
+    }
     total_sum = sum(r.cnt for r in status_rows) or 1
 
-    present: dict[str, bool] = {"Pending": False, "In-progress": False, "Resolved": False}
+    present: dict[str, bool] = {
+        "Pending": False,
+        "In-progress": False,
+        "Resolved": False,
+    }
     resolution_data: list[ResolutionStatusItem] = []
-    for r in status_rows:
-        title = r.status.replace("_", " ").title()
+    for status_row in status_rows:
+        title = status_row.status.replace("_", " ").title()
         present[title] = True
-        resolution_data.append(ResolutionStatusItem(
-            name=title,
-            value=_round2(r.cnt / total_sum * 100),
-            color=_STATUS_COLORS.get(r.status, "#6B7280"),
-        ))
+        resolution_data.append(
+            ResolutionStatusItem(
+                name=title,
+                value=_round2(status_row.cnt / total_sum * 100),
+                color=_STATUS_COLORS.get(status_row.status, "#6B7280"),
+            )
+        )
     for name, seen in present.items():
         if not seen:
-            resolution_data.append(ResolutionStatusItem(
-                name=name, value=0.0, color=_STATUS_COLORS.get(name.lower(), "#6B7280")
-            ))
+            resolution_data.append(
+                ResolutionStatusItem(
+                    name=name,
+                    value=0.0,
+                    color=_STATUS_COLORS.get(name.lower(), "#6B7280"),
+                )
+            )
 
     # Recent escalations
-    recent_rows = (await session.execute(
-        select(Escalation, Patient)
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(Escalation.escalated_at).between(start, today),
+    recent_rows = (
+        await session.execute(
+            select(Escalation, Patient)
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(Escalation.escalated_at).between(start, today),
+            )
+            .order_by(Escalation.escalated_at.desc())
+            .limit(5)
         )
-        .order_by(Escalation.escalated_at.desc())
-        .limit(5)
-    )).all()
+    ).all()
     recent_escs = [
         RecentEscalation(
             id=esc.id,
@@ -781,14 +922,16 @@ async def escalation_engagement(
     ]
 
     # Metadata
-    total_esc = (await session.scalar(
-        select(func.count(Escalation.id))
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            func.date(Escalation.escalated_at).between(start, today),
+    total_esc = (
+        await session.scalar(
+            select(func.count(Escalation.id))
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                func.date(Escalation.escalated_at).between(start, today),
+            )
         )
-    )) or 0
+    ) or 0
 
     avg_res = await session.scalar(
         select(
@@ -805,15 +948,17 @@ async def escalation_engagement(
     )
     avg_res_minutes = _round2((avg_res or 0) / 60)
 
-    resolved_today = (await session.scalar(
-        select(func.count(Escalation.id))
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(
-            Patient.organization_id == org_id,
-            Escalation.status == "resolved",
-            func.date(Escalation.resolved_at) == today,
+    resolved_today = (
+        await session.scalar(
+            select(func.count(Escalation.id))
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(
+                Patient.organization_id == org_id,
+                Escalation.status == "resolved",
+                func.date(Escalation.resolved_at) == today,
+            )
         )
-    )) or 0
+    ) or 0
 
     return EscalationEngagementResponse(
         departmentEscalationData=dept_esc_data,
@@ -851,62 +996,76 @@ async def roi_metrics(
     if call_direction == "inbound":
         from api.app.models.hospital.call import InboundCall, InboundFeedback
 
-        attempts = (await session.scalar(
-            select(func.count(InboundCall.id))
-            .where(
-                InboundCall.organization_id == org_id,
-                func.date(InboundCall.started_at).between(start, today),
+        attempts = (
+            await session.scalar(
+                select(func.count(InboundCall.id)).where(
+                    InboundCall.organization_id == org_id,
+                    func.date(InboundCall.started_at).between(start, today),
+                )
             )
-        )) or 0
+        ) or 0
 
-        missed = (await session.scalar(
-            select(func.count(InboundCall.id))
-            .where(
-                InboundCall.organization_id == org_id,
-                InboundCall.calling_process == "not_connected",
-                func.date(InboundCall.started_at).between(start, today),
+        missed = (
+            await session.scalar(
+                select(func.count(InboundCall.id)).where(
+                    InboundCall.organization_id == org_id,
+                    InboundCall.calling_process == "not_connected",
+                    func.date(InboundCall.started_at).between(start, today),
+                )
             )
-        )) or 0
+        ) or 0
 
-        booked, total_dur = (await session.execute(
-            select(
-                func.count(InboundFeedback.id).filter(InboundFeedback.call_outcome == "positive").label("booked"),
-                func.sum(cast(InboundFeedback.call_duration, Float)).label("tdur"),
+        booked, total_dur = (
+            await session.execute(
+                select(
+                    func.count(InboundFeedback.id)
+                    .filter(InboundFeedback.call_outcome == "positive")
+                    .label("booked"),
+                    func.sum(cast(InboundFeedback.call_duration, Float)).label("tdur"),
+                )
+                .join(InboundCall, InboundFeedback.inbound_call_id == InboundCall.id)
+                .where(InboundCall.organization_id == org_id)
             )
-            .join(InboundCall, InboundFeedback.inbound_call_id == InboundCall.id)
-            .where(InboundCall.organization_id == org_id)
-        )).one()
+        ).one()
     else:
-        attempts = (await session.scalar(
-            select(func.count(OutboundCall.id))
-            .join(Patient, OutboundCall.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(OutboundCall.started_at).between(start, today),
+        attempts = (
+            await session.scalar(
+                select(func.count(OutboundCall.id))
+                .join(Patient, OutboundCall.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(OutboundCall.started_at).between(start, today),
+                )
             )
-        )) or 0
+        ) or 0
 
-        missed = (await session.scalar(
-            select(func.count(OutboundCall.id))
-            .join(Patient, OutboundCall.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                OutboundCall.calling_process == "not_connected",
-                func.date(OutboundCall.started_at).between(start, today),
+        missed = (
+            await session.scalar(
+                select(func.count(OutboundCall.id))
+                .join(Patient, OutboundCall.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    OutboundCall.calling_process == "not_connected",
+                    func.date(OutboundCall.started_at).between(start, today),
+                )
             )
-        )) or 0
+        ) or 0
 
-        booked, total_dur = (await session.execute(
-            select(
-                func.count(CallFeedback.id).filter(CallFeedback.call_outcome == "positive").label("booked"),
-                func.sum(cast(CallFeedback.call_duration, Float)).label("tdur"),
+        booked, total_dur = (
+            await session.execute(
+                select(
+                    func.count(CallFeedback.id)
+                    .filter(CallFeedback.call_outcome == "positive")
+                    .label("booked"),
+                    func.sum(cast(CallFeedback.call_duration, Float)).label("tdur"),
+                )
+                .join(Patient, CallFeedback.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(CallFeedback.called_at).between(start, today),
+                )
             )
-            .join(Patient, CallFeedback.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(CallFeedback.called_at).between(start, today),
-            )
-        )).one()
+        ).one()
 
     booked = booked or 0
     tdur = float(total_dur or 0)  # minutes
@@ -920,7 +1079,11 @@ async def roi_metrics(
             {"name": "Interactions", "value": attempts, "unit": ""},
             {"name": "Appointments Booked", "value": booked, "unit": ""},
             {"name": "Revenue Influenced", "value": booked * 650, "unit": "₹"},
-            {"name": "Leakage Prevented", "value": int(missed * 0.42 * 650), "unit": "₹"},
+            {
+                "name": "Leakage Prevented",
+                "value": int(missed * 0.42 * 650),
+                "unit": "₹",
+            },
         ],
         "roi_efficiency": [
             {"name": "Staff Hours Saved", "value": staff_hours, "unit": "hrs"},
@@ -944,32 +1107,42 @@ async def department_analytics(
     start = start_date or (today - timedelta(days=730))
 
     if call_direction == "inbound":
-        from api.app.models.hospital.call import (
-            InboundCall,
-            InboundCommunityEngagement,
-            InboundFeedback,
-        )
+        from api.app.models.hospital.call import (InboundCall,
+                                                  InboundCommunityEngagement,
+                                                  InboundFeedback)
 
         # Per-department interaction counts
-        dept_rows = (await session.execute(
-            select(InboundCall.department.label("dept"), func.count(InboundCall.id).label("interactions"))
-            .where(
-                InboundCall.organization_id == org_id,
-                func.date(InboundCall.started_at).between(start, today),
+        dept_rows = (
+            await session.execute(
+                select(
+                    InboundCall.department.label("dept"),
+                    func.count(InboundCall.id).label("interactions"),
+                )
+                .where(
+                    InboundCall.organization_id == org_id,
+                    func.date(InboundCall.started_at).between(start, today),
+                )
+                .group_by(InboundCall.department)
             )
-            .group_by(InboundCall.department)
-        )).all()
+        ).all()
 
         # Bookings per department (positive outcome in feedback)
-        book_rows = (await session.execute(
-            select(InboundCall.department.label("dept"), func.count(InboundFeedback.id).label("bookings"))
-            .join(InboundFeedback, InboundFeedback.inbound_call_id == InboundCall.id)
-            .where(
-                InboundCall.organization_id == org_id,
-                InboundFeedback.call_outcome == "positive",
+        book_rows = (
+            await session.execute(
+                select(
+                    InboundCall.department.label("dept"),
+                    func.count(InboundFeedback.id).label("bookings"),
+                )
+                .join(
+                    InboundFeedback, InboundFeedback.inbound_call_id == InboundCall.id
+                )
+                .where(
+                    InboundCall.organization_id == org_id,
+                    InboundFeedback.call_outcome == "positive",
+                )
+                .group_by(InboundCall.department)
             )
-            .group_by(InboundCall.department)
-        )).all()
+        ).all()
 
         book_map = {r.dept: r.bookings for r in book_rows}
 
@@ -984,34 +1157,54 @@ async def department_analytics(
             for r in dept_rows
         ]
 
-        intent_rows = (await session.execute(
-            select(
-                InboundCommunityEngagement.engagement_type.label("etype"),
-                func.count(InboundCommunityEngagement.id).label("value"),
+        intent_rows = (
+            await session.execute(
+                select(
+                    InboundCommunityEngagement.engagement_type.label("etype"),
+                    func.count(InboundCommunityEngagement.id).label("value"),
+                )
+                .join(
+                    InboundCall,
+                    InboundCommunityEngagement.inbound_call_id == InboundCall.id,
+                )
+                .where(
+                    InboundCall.organization_id == org_id,
+                    func.date(InboundCommunityEngagement.created_at).between(
+                        start, today
+                    ),
+                )
+                .group_by(InboundCommunityEngagement.engagement_type)
+                .order_by(func.count(InboundCommunityEngagement.id).desc())
             )
-            .join(InboundCall, InboundCommunityEngagement.inbound_call_id == InboundCall.id)
-            .where(
-                InboundCall.organization_id == org_id,
-                func.date(InboundCommunityEngagement.created_at).between(start, today),
-            )
-            .group_by(InboundCommunityEngagement.engagement_type)
-            .order_by(func.count(InboundCommunityEngagement.id).desc())
-        )).all()
+        ).all()
 
     else:
         # Outbound: dept from patients table
-        dept_rows = (await session.execute(
-            select(Patient.department.label("dept"), func.count(Patient.id).label("interactions"))
-            .where(Patient.organization_id == org_id)
-            .group_by(Patient.department)
-        )).all()
+        dept_rows = (
+            await session.execute(
+                select(
+                    Patient.department.label("dept"),
+                    func.count(Patient.id).label("interactions"),
+                )
+                .where(Patient.organization_id == org_id)
+                .group_by(Patient.department)
+            )
+        ).all()
 
-        book_rows = (await session.execute(
-            select(Patient.department.label("dept"), func.count(CallFeedback.id).label("bookings"))
-            .join(CallFeedback, CallFeedback.patient_id == Patient.id)
-            .where(Patient.organization_id == org_id, CallFeedback.call_outcome == "positive")
-            .group_by(Patient.department)
-        )).all()
+        book_rows = (
+            await session.execute(
+                select(
+                    Patient.department.label("dept"),
+                    func.count(CallFeedback.id).label("bookings"),
+                )
+                .join(CallFeedback, CallFeedback.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    CallFeedback.call_outcome == "positive",
+                )
+                .group_by(Patient.department)
+            )
+        ).all()
         book_map = {r.dept: r.bookings for r in book_rows}
 
         department_table = [
@@ -1025,26 +1218,32 @@ async def department_analytics(
             for r in dept_rows
         ]
 
-        intent_rows = (await session.execute(
-            select(
-                CommunityEngagement.engagement_type.label("etype"),
-                func.count(CommunityEngagement.id).label("value"),
+        intent_rows = (
+            await session.execute(
+                select(
+                    CommunityEngagement.engagement_type.label("etype"),
+                    func.count(CommunityEngagement.id).label("value"),
+                )
+                .join(Patient, CommunityEngagement.patient_id == Patient.id)
+                .where(
+                    Patient.organization_id == org_id,
+                    func.date(CommunityEngagement.created_at).between(start, today),
+                )
+                .group_by(CommunityEngagement.engagement_type)
+                .order_by(func.count(CommunityEngagement.id).desc())
             )
-            .join(Patient, CommunityEngagement.patient_id == Patient.id)
-            .where(
-                Patient.organization_id == org_id,
-                func.date(CommunityEngagement.created_at).between(start, today),
-            )
-            .group_by(CommunityEngagement.engagement_type)
-            .order_by(func.count(CommunityEngagement.id).desc())
-        )).all()
+        ).all()
 
     top_intents = [
         {"intent": r.etype.replace("_", " ").title(), "value": r.value}
         for r in intent_rows
     ]
 
-    return {"error": 0, "department_table": department_table, "top_intents": top_intents}
+    return {
+        "error": 0,
+        "department_table": department_table,
+        "top_intents": top_intents,
+    }
 
 
 @router.get("/recent-activity", response_model=RecentActivityResponse)
@@ -1054,43 +1253,87 @@ async def recent_activity(
 ) -> RecentActivityResponse:
     org_id = current_user.organization_id
 
-    call_rows = (await session.execute(
-        select(CallFeedback.id, CallFeedback.call_outcome, CallFeedback.called_at, Patient.patient_name)
-        .join(Patient, CallFeedback.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-        .order_by(CallFeedback.called_at.desc())
-        .limit(5)
-    )).all()
+    call_rows = (
+        await session.execute(
+            select(
+                CallFeedback.id,
+                CallFeedback.call_outcome,
+                CallFeedback.called_at,
+                Patient.patient_name,
+            )
+            .join(Patient, CallFeedback.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+            .order_by(CallFeedback.called_at.desc())
+            .limit(5)
+        )
+    ).all()
 
-    esc_rows = (await session.execute(
-        select(Escalation.id, Escalation.issue_description, Escalation.status, Escalation.escalated_at, Patient.patient_name)
-        .join(Patient, Escalation.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-        .order_by(Escalation.escalated_at.desc())
-        .limit(5)
-    )).all()
+    esc_rows = (
+        await session.execute(
+            select(
+                Escalation.id,
+                Escalation.issue_description,
+                Escalation.status,
+                Escalation.escalated_at,
+                Patient.patient_name,
+            )
+            .join(Patient, Escalation.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+            .order_by(Escalation.escalated_at.desc())
+            .limit(5)
+        )
+    ).all()
 
-    comm_rows = (await session.execute(
-        select(CommunityEngagement.id, CommunityEngagement.engagement_type, CommunityEngagement.created_at, Patient.patient_name)
-        .join(Patient, CommunityEngagement.patient_id == Patient.id)
-        .where(Patient.organization_id == org_id)
-        .order_by(CommunityEngagement.created_at.desc())
-        .limit(5)
-    )).all()
+    comm_rows = (
+        await session.execute(
+            select(
+                CommunityEngagement.id,
+                CommunityEngagement.engagement_type,
+                CommunityEngagement.created_at,
+                Patient.patient_name,
+            )
+            .join(Patient, CommunityEngagement.patient_id == Patient.id)
+            .where(Patient.organization_id == org_id)
+            .order_by(CommunityEngagement.created_at.desc())
+            .limit(5)
+        )
+    ).all()
 
-    org_name = await session.scalar(select(Organization.name).where(Organization.id == org_id)) or ""
+    org_name = (
+        await session.scalar(select(Organization.name).where(Organization.id == org_id))
+        or ""
+    )
 
     return RecentActivityResponse(
         call_data=[
-            {"id": str(r.id), "call_outcome": r.call_outcome, "called_at": r.called_at, "hospital": org_name, "patient_name": r.patient_name}
+            {
+                "id": str(r.id),
+                "call_outcome": r.call_outcome,
+                "called_at": r.called_at,
+                "hospital": org_name,
+                "patient_name": r.patient_name,
+            }
             for r in call_rows
         ],
         escalation_data=[
-            {"id": str(r.id), "issue_description": r.issue_description, "status": r.status, "escalated_at": r.escalated_at, "hospital": org_name, "patient_name": r.patient_name}
+            {
+                "id": str(r.id),
+                "issue_description": r.issue_description,
+                "status": r.status,
+                "escalated_at": r.escalated_at,
+                "hospital": org_name,
+                "patient_name": r.patient_name,
+            }
             for r in esc_rows
         ],
         community_data=[
-            {"id": str(r.id), "engagement_type": r.engagement_type, "created_at": r.created_at, "hospital": org_name, "patient_name": r.patient_name}
+            {
+                "id": str(r.id),
+                "engagement_type": r.engagement_type,
+                "created_at": r.created_at,
+                "hospital": org_name,
+                "patient_name": r.patient_name,
+            }
             for r in comm_rows
         ],
     )
