@@ -28,11 +28,14 @@ from api.app.schemas.hospital.dashboard import (AdminDashboardResponse,
                                                 DeptRevisitItem,
                                                 EscalationEngagementResponse,
                                                 EscalationIssue,
-                                                EscalationMeta, KPICard,
+                                                EscalationMeta,
+                                                FeedbackDistItem,
+                                                FeedbackPatient, KPICard,
                                                 KPISummaryResponse,
                                                 MonthlyRevisitPoint,
                                                 PatientEngagementMeta,
                                                 PatientEngagementResponse,
+                                                PatientIntent,
                                                 RecentActivityResponse,
                                                 RecentEscalation,
                                                 ResolutionStatusItem,
@@ -607,7 +610,7 @@ async def community_engagement(
     ).all()
 
     # For each outcome, fetch top 10 patients with remarks
-    feedback_dist = []
+    feedback_dist: list[FeedbackDistItem] = []
     for fb_row in fb_rows:
         outcome = fb_row.call_outcome
         detail_rows = (
@@ -626,20 +629,20 @@ async def community_engagement(
             )
         ).all()
         feedback_dist.append(
-            {
-                "name": outcome.replace("_", " ").title(),
-                "value": fb_row.cnt,
-                "patients": [
-                    {
-                        "name": d.patient_name,
-                        "date": (
-                            d.called_at.strftime("%Y-%m-%d") if d.called_at else "N/A"
-                        ),
-                        "feedback": d.remarks or "No remarks provided.",
-                    }
+            FeedbackDistItem(
+                name=outcome.replace("_", " ").title(),
+                value=fb_row.cnt,
+                patients=[
+                    FeedbackPatient(
+                        name=d.patient_name,
+                        date=d.called_at.strftime("%Y-%m-%d")
+                        if d.called_at
+                        else "N/A",
+                        feedback=d.remarks or "No remarks provided.",
+                    )
                     for d in detail_rows
                 ],
-            }
+            )
         )
 
     # Patient intents from community engagement types
@@ -657,13 +660,13 @@ async def community_engagement(
     ).all()
 
     patient_intents = [
-        {
-            "name": r.engagement_type.replace("_", " ").title(),
-            "value": r.cnt,
-            "intent": r.engagement_type.replace("_", " ").title(),
-            "count": r.cnt,
-            "patients": [],
-        }
+        PatientIntent(
+            name=r.engagement_type.replace("_", " ").title(),
+            value=r.cnt,
+            intent=r.engagement_type.replace("_", " ").title(),
+            count=r.cnt,
+            patients=[],
+        )
         for r in intent_rows
     ]
 
@@ -874,14 +877,14 @@ async def escalation_engagement(
         "Resolved": False,
     }
     resolution_data: list[ResolutionStatusItem] = []
-    for r in status_rows:
-        title = r.status.replace("_", " ").title()
+    for status_row in status_rows:
+        title = status_row.status.replace("_", " ").title()
         present[title] = True
         resolution_data.append(
             ResolutionStatusItem(
                 name=title,
-                value=_round2(r.cnt / total_sum * 100),
-                color=_STATUS_COLORS.get(r.status, "#6B7280"),
+                value=_round2(status_row.cnt / total_sum * 100),
+                color=_STATUS_COLORS.get(status_row.status, "#6B7280"),
             )
         )
     for name, seen in present.items():

@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from datetime import time as dt_time
 from datetime import timedelta, timezone
+from typing import Any, cast
 
 import boto3
 from asgiref.sync import async_to_sync
@@ -445,7 +446,9 @@ def run_campaign_task(self, campaign_id: str):
 
             # Respect concurrency ceiling
             while True:
-                active = int(redis_client.get("active_outbound_calls_count") or 0)
+                active = int(
+                    cast(Any, redis_client.get("active_outbound_calls_count")) or 0
+                )
                 if active < CONCURRENCY_LIMIT:
                     break
                 logger.debug(

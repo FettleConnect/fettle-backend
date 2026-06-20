@@ -253,15 +253,15 @@ async def patient_call_history(
                 summary="AI Outbound Summary available in transcript link",
             )
         )
-    for c in in_rows:
+    for inbound_call in in_rows:
         history.append(
             CallHistoryItem(
-                id=str(c.id),
+                id=str(inbound_call.id),
                 type="inbound",
-                started_at=c.started_at,
-                status=c.calling_process,
-                transcript_link=get_presigned_url(c.message_s3_link),
-                audio_link=get_presigned_url(c.audio_s3_link),
+                started_at=inbound_call.started_at,
+                status=inbound_call.calling_process,
+                transcript_link=get_presigned_url(inbound_call.message_s3_link),
+                audio_link=get_presigned_url(inbound_call.audio_s3_link),
                 summary="AI Inbound Summary available in transcript link",
             )
         )

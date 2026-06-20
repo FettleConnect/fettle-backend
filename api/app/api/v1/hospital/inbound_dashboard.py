@@ -27,10 +27,13 @@ from api.app.schemas.hospital.dashboard import (CallAnswerItem,
                                                 EscalationEngagementResponse,
                                                 EscalationIssue,
                                                 EscalationMeta,
+                                                FeedbackDistItem,
+                                                FeedbackPatient,
                                                 InboundKPIResponse, KPICard,
                                                 MonthlyRevisitPoint,
                                                 PatientEngagementMeta,
                                                 PatientEngagementResponse,
+                                                PatientIntent,
                                                 RecentEscalation,
                                                 ResolutionStatusItem,
                                                 RevisitAnalyticsResponse,
@@ -464,8 +467,8 @@ async def community_engagement_inbound(
         )
     ).all()
 
-    feedback_dist = []
-    for r in fb_rows:
+    feedback_dist: list[FeedbackDistItem] = []
+    for fb_row in fb_rows:
         detail_rows = (
             await session.execute(
                 select(
@@ -476,27 +479,27 @@ async def community_engagement_inbound(
                 .join(InboundCall, InboundFeedback.inbound_call_id == InboundCall.id)
                 .where(
                     InboundCall.organization_id == org_id,
-                    InboundFeedback.call_outcome == r.call_outcome,
+                    InboundFeedback.call_outcome == fb_row.call_outcome,
                 )
                 .order_by(InboundFeedback.created_at.desc())
                 .limit(10)
             )
         ).all()
         feedback_dist.append(
-            {
-                "name": r.call_outcome.replace("_", " ").title(),
-                "value": r.cnt,
-                "patients": [
-                    {
-                        "name": d.from_phone_number or "Unknown",
-                        "date": (
-                            d.created_at.strftime("%Y-%m-%d") if d.created_at else "N/A"
-                        ),
-                        "feedback": d.remarks or "No remarks provided.",
-                    }
+            FeedbackDistItem(
+                name=fb_row.call_outcome.replace("_", " ").title(),
+                value=fb_row.cnt,
+                patients=[
+                    FeedbackPatient(
+                        name=d.from_phone_number or "Unknown",
+                        date=d.created_at.strftime("%Y-%m-%d")
+                        if d.created_at
+                        else "N/A",
+                        feedback=d.remarks or "No remarks provided.",
+                    )
                     for d in detail_rows
                 ],
-            }
+            )
         )
 
     # Intents from engagement types
@@ -516,13 +519,13 @@ async def community_engagement_inbound(
         )
     ).all()
     patient_intents = [
-        {
-            "name": r.engagement_type.replace("_", " ").title(),
-            "value": r.cnt,
-            "intent": r.engagement_type.replace("_", " ").title(),
-            "count": r.cnt,
-            "patients": [],
-        }
+        PatientIntent(
+            name=r.engagement_type.replace("_", " ").title(),
+            value=r.cnt,
+            intent=r.engagement_type.replace("_", " ").title(),
+            count=r.cnt,
+            patients=[],
+        )
         for r in intent_rows
     ]
 
@@ -613,14 +616,14 @@ async def escalation_engagement_inbound(
         "Resolved": False,
     }
     resolution_data: list[ResolutionStatusItem] = []
-    for r in status_rows:
-        title = r.status.replace("_", " ").title()
+    for status_row in status_rows:
+        title = status_row.status.replace("_", " ").title()
         present[title] = True
         resolution_data.append(
             ResolutionStatusItem(
                 name=title,
-                value=_round2(r.cnt / total_sum * 100),
-                color=_SC.get(r.status, "#6B7280"),
+                value=_round2(status_row.cnt / total_sum * 100),
+                color=_SC.get(status_row.status, "#6B7280"),
             )
         )
     for name, seen in present.items():

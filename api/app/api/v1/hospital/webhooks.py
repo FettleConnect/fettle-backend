@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any, cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select, update
@@ -59,7 +60,7 @@ async def _handle_room_finished(room_name: str, session: AsyncSession) -> None:
     # Decrement concurrency counter (self-healing: clamp to 0)
     try:
         r = _redis.StrictRedis.from_url(settings.redis_url, decode_responses=True)
-        new_count = r.decr("active_outbound_calls_count")
+        new_count = int(cast(Any, r.decr("active_outbound_calls_count")))
         if new_count < 0:
             r.set("active_outbound_calls_count", 0)
     except Exception as exc:

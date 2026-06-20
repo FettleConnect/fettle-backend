@@ -375,7 +375,7 @@ def _notify_escalation_bg(
 
     from api.app.services.whatsapp import send_whatsapp
 
-    admin_phone = to_number or os.getenv("ADMIN_PHONE", "+917032451866")
+    admin_phone = to_number or os.getenv("ADMIN_PHONE") or "+917032451866"
 
     async def _send() -> None:
         await send_whatsapp(

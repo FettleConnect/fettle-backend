@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import os
 import uuid
+from typing import Any, cast
 
 from fastapi import (APIRouter, Depends, HTTPException, Request)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -521,17 +522,17 @@ async def legacy_doctor_respond(
     content_type = request.headers.get("content-type", "")
     if "multipart" in content_type:
         form = await request.form()
-        conversation_id = form.get("id", "")
-        message = form.get("question", "")
+        conversation_id = str(form.get("id", "") or "")
+        message = str(form.get("question", "") or "")
         images = form.getlist("image")
     else:
         data = await request.json()
-        conversation_id = data.get("id", "")
-        message = data.get("question", "")
+        conversation_id = str(data.get("id", "") or "")
+        message = str(data.get("question", "") or "")
         images = []
 
     thread = await session.scalar(
-        select(DermatologyThread).where(
+        cast(Any, select(DermatologyThread)).where(
             DermatologyThread.id == uuid.UUID(conversation_id),
             DermatologyThread.organization_id == doctor.organization_id,
         )

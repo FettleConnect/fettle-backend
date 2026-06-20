@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+from typing import Any, cast
 
 import httpx
 from dotenv import load_dotenv
@@ -241,9 +242,9 @@ class _FillerMixin:
                 for frame in self._filler_audio_cache[filler]:
                     yield frame
 
-            self.session.say(filler, audio=_gen(), add_to_chat_ctx=False)
+            cast(Any, self).session.say(filler, audio=_gen(), add_to_chat_ctx=False)
         else:
-            self.session.say(filler, add_to_chat_ctx=False)
+            cast(Any, self).session.say(filler, add_to_chat_ctx=False)
 
 
 class InboundAssistant(_FillerMixin, Agent):

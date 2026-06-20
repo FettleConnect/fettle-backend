@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import uuid
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional, cast
 
 from fastapi import (APIRouter, Depends, HTTPException, Request,
                      status)
@@ -379,15 +379,15 @@ async def send_chat_message(
     content_type = request.headers.get("content-type", "")
     if "multipart" in content_type:
         form = await request.form()
-        question = form.get("question", "")
-        step = form.get("step", "")
-        thread_id = form.get("thread_id", "")
+        question = str(form.get("question", "") or "")
+        step = str(form.get("step", "") or "")
+        thread_id = str(form.get("thread_id", "") or "")
         images = form.getlist("image")  # type: ignore[attr-defined]
     else:
         data = await request.json()
-        question = data.get("question", "")
-        step = data.get("step", "")
-        thread_id = data.get("thread_id", "")
+        question = str(data.get("question", "") or "")
+        step = str(data.get("step", "") or "")
+        thread_id = str(data.get("thread_id", "") or "")
         images = []
 
     # Resolve thread
@@ -395,7 +395,7 @@ async def send_chat_message(
     if thread_id:
         try:
             thread = await session.scalar(
-                select(DermatologyThread).where(
+                cast(Any, select(DermatologyThread)).where(
                     DermatologyThread.id == uuid.UUID(thread_id),
                     DermatologyThread.patient_id == patient.id,
                 )
