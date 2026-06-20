@@ -341,10 +341,12 @@ async def _create_inbound_feedback(
     ai_result: dict,
     call_duration: float,
 ) -> None:
-    from api.app.models.hospital.call import (InboundCall,
-                                              InboundCommunityEngagement,
-                                              InboundEscalation,
-                                              InboundFeedback)
+    from api.app.models.hospital.call import (
+        InboundCall,
+        InboundCommunityEngagement,
+        InboundEscalation,
+        InboundFeedback,
+    )
 
     async with AsyncSessionLocal() as session:
         inbound_id = uuid.UUID(inbound_call_id)

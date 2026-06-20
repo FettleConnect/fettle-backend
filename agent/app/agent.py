@@ -10,10 +10,19 @@ from typing import Any, cast
 import httpx
 from dotenv import load_dotenv
 from livekit import rtc
-from livekit.agents import (Agent, AgentServer, AgentSession,
-                            InterruptionOptions, JobContext, JobExecutorType,
-                            JobProcess, RunContext, TurnHandlingOptions, cli,
-                            function_tool)
+from livekit.agents import (
+    Agent,
+    AgentServer,
+    AgentSession,
+    InterruptionOptions,
+    JobContext,
+    JobExecutorType,
+    JobProcess,
+    RunContext,
+    TurnHandlingOptions,
+    cli,
+    function_tool,
+)
 from livekit.agents.beta.tools import EndCallTool
 from livekit.agents.llm.tool_context import ToolFlag
 from livekit.plugins import cartesia, openai, silero, soniox
@@ -587,7 +596,7 @@ async def infrastructure_guard() -> None:
     except Exception as exc:
         logger.error("Guard: failed to fetch hospitals: %s", exc)
         return
-    
+
     api_key = os.environ.get("LIVEKIT_API_KEY", "")
 
     if not api_key:
@@ -613,8 +622,7 @@ async def infrastructure_guard() -> None:
                 if not vobiz_did:
                     continue
 
-            from api.app.services.livekit import \
-                ensure_infrastructure as _ensure
+            from api.app.services.livekit import ensure_infrastructure as _ensure
 
             await _ensure(
                 organization_id=org_id, hospital_name=name, vobiz_did=vobiz_did

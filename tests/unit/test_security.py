@@ -76,8 +76,7 @@ class TestJWT:
         assert payload["role"] == "doctor"
 
     def test_decode_expired_token_raises(self) -> None:
-        from api.app.core.security import (TokenError, create_access_token,
-                                           decode_token)
+        from api.app.core.security import TokenError, create_access_token, decode_token
 
         token = create_access_token(
             user_id=uuid.uuid4(),

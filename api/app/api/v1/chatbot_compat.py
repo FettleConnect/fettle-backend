@@ -5,24 +5,31 @@ import os
 import uuid
 from typing import Any, cast
 
-from fastapi import (APIRouter, Depends, HTTPException, Request)
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.api.v1.chatbot import (_DOCTOR_DRAFT_SYSTEM,
-                                    _chat_with_ai,
-                                    _create_patient_token,
-                                    _generate_doctor_draft,
-                                    _get_current_doctor, _get_current_patient,
-                                    _get_or_create_thread, _process_images)
-from api.app.core.security import (TokenError, create_access_token,
-                                   decode_token, verify_password)
+from api.app.api.v1.chatbot import (
+    _DOCTOR_DRAFT_SYSTEM,
+    _chat_with_ai,
+    _create_patient_token,
+    _generate_doctor_draft,
+    _get_current_doctor,
+    _get_current_patient,
+    _get_or_create_thread,
+    _process_images,
+)
+from api.app.core.security import (
+    TokenError,
+    create_access_token,
+    decode_token,
+    verify_password,
+)
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import (DermatologyPatient,
-                                                 DermatologyThread)
+from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.organization import Organization
 from api.app.models.shared import GlobalConfig
 
@@ -205,7 +212,6 @@ async def legacy_login(
     )
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
 
     token = create_access_token(
         user_id=user.id,

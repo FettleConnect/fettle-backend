@@ -20,8 +20,7 @@ try:
     from api.app.db.base import Base  # noqa: E402
 except ModuleNotFoundError:
     import app.models  # type: ignore[no-redef]  # noqa: F401, E402
-    from app.core.config import \
-        settings  # type: ignore[no-redef]  # noqa: E402
+    from app.core.config import settings  # type: ignore[no-redef]  # noqa: E402
     from app.db.base import Base  # type: ignore[no-redef]  # noqa: E402
 
 config = context.config

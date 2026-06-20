@@ -12,35 +12,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.call import (CallFeedback, CommunityEngagement,
-                                          Escalation, OutboundCall)
+from api.app.models.hospital.call import (
+    CallFeedback,
+    CommunityEngagement,
+    Escalation,
+    OutboundCall,
+)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
-from api.app.schemas.hospital.dashboard import (AdminDashboardResponse,
-                                                CallAnswerItem,
-                                                CommunityEngagementMeta,
-                                                CommunityEngagementMetrics,
-                                                CommunityEngagementResponse,
-                                                CommunityGrowthPoint,
-                                                ContactDataPoint,
-                                                DeptEngagementItem,
-                                                DeptEscalationItem,
-                                                DeptRevisitItem,
-                                                EscalationEngagementResponse,
-                                                EscalationIssue,
-                                                EscalationMeta,
-                                                FeedbackDistItem,
-                                                FeedbackPatient, KPICard,
-                                                KPISummaryResponse,
-                                                MonthlyRevisitPoint,
-                                                PatientEngagementMeta,
-                                                PatientEngagementResponse,
-                                                PatientIntent,
-                                                RecentActivityResponse,
-                                                RecentEscalation,
-                                                ResolutionStatusItem,
-                                                RevisitAnalyticsResponse,
-                                                TimeGapItem)
+from api.app.schemas.hospital.dashboard import (
+    AdminDashboardResponse,
+    CallAnswerItem,
+    CommunityEngagementMeta,
+    CommunityEngagementMetrics,
+    CommunityEngagementResponse,
+    CommunityGrowthPoint,
+    ContactDataPoint,
+    DeptEngagementItem,
+    DeptEscalationItem,
+    DeptRevisitItem,
+    EscalationEngagementResponse,
+    EscalationIssue,
+    EscalationMeta,
+    FeedbackDistItem,
+    FeedbackPatient,
+    KPICard,
+    KPISummaryResponse,
+    MonthlyRevisitPoint,
+    PatientEngagementMeta,
+    PatientEngagementResponse,
+    PatientIntent,
+    RecentActivityResponse,
+    RecentEscalation,
+    ResolutionStatusItem,
+    RevisitAnalyticsResponse,
+    TimeGapItem,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard-outbound"])
 
@@ -635,9 +642,7 @@ async def community_engagement(
                 patients=[
                     FeedbackPatient(
                         name=d.patient_name,
-                        date=d.called_at.strftime("%Y-%m-%d")
-                        if d.called_at
-                        else "N/A",
+                        date=d.called_at.strftime("%Y-%m-%d") if d.called_at else "N/A",
                         feedback=d.remarks or "No remarks provided.",
                     )
                     for d in detail_rows
@@ -1107,9 +1112,11 @@ async def department_analytics(
     start = start_date or (today - timedelta(days=730))
 
     if call_direction == "inbound":
-        from api.app.models.hospital.call import (InboundCall,
-                                                  InboundCommunityEngagement,
-                                                  InboundFeedback)
+        from api.app.models.hospital.call import (
+            InboundCall,
+            InboundCommunityEngagement,
+            InboundFeedback,
+        )
 
         # Per-department interaction counts
         dept_rows = (

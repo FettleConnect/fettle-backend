@@ -66,8 +66,7 @@ async def _handle_room_finished(room_name: str, session: AsyncSession) -> None:
     except Exception as exc:
         logger.warning("Redis decrement failed: %s", exc)
 
-    from api.app.worker.tasks import (process_inbound_calls,
-                                      process_outbound_calls)
+    from api.app.worker.tasks import process_inbound_calls, process_outbound_calls
 
     if room_name.startswith("inbound_"):
         process_inbound_calls.delay({"vapi_id": room_name})

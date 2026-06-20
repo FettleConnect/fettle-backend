@@ -15,8 +15,7 @@ if sys.platform == "win32":
 
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
-                                    create_async_engine)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # ── Set required env vars BEFORE any app imports ──────────────────────────────
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")

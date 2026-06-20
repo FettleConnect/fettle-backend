@@ -14,8 +14,7 @@ async def _hospital_setup(async_client: AsyncClient, db_session: AsyncSession) -
     """Returns (org_id, token, patient_id, doctor_id)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import (CallFeedback, Escalation,
-                                              InboundCall)
+    from api.app.models.hospital.call import CallFeedback, Escalation, InboundCall
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import HospitalConfig, Organization
 

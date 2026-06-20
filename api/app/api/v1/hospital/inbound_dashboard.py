@@ -12,32 +12,38 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.call import (InboundCall,
-                                          InboundCommunityEngagement,
-                                          InboundEscalation, InboundFeedback)
-from api.app.schemas.hospital.dashboard import (CallAnswerItem,
-                                                CommunityEngagementMeta,
-                                                CommunityEngagementMetrics,
-                                                CommunityEngagementResponse,
-                                                CommunityGrowthPoint,
-                                                ContactDataPoint,
-                                                DeptEngagementItem,
-                                                DeptEscalationItem,
-                                                DeptRevisitItem,
-                                                EscalationEngagementResponse,
-                                                EscalationIssue,
-                                                EscalationMeta,
-                                                FeedbackDistItem,
-                                                FeedbackPatient,
-                                                InboundKPIResponse, KPICard,
-                                                MonthlyRevisitPoint,
-                                                PatientEngagementMeta,
-                                                PatientEngagementResponse,
-                                                PatientIntent,
-                                                RecentEscalation,
-                                                ResolutionStatusItem,
-                                                RevisitAnalyticsResponse,
-                                                TimeGapItem)
+from api.app.models.hospital.call import (
+    InboundCall,
+    InboundCommunityEngagement,
+    InboundEscalation,
+    InboundFeedback,
+)
+from api.app.schemas.hospital.dashboard import (
+    CallAnswerItem,
+    CommunityEngagementMeta,
+    CommunityEngagementMetrics,
+    CommunityEngagementResponse,
+    CommunityGrowthPoint,
+    ContactDataPoint,
+    DeptEngagementItem,
+    DeptEscalationItem,
+    DeptRevisitItem,
+    EscalationEngagementResponse,
+    EscalationIssue,
+    EscalationMeta,
+    FeedbackDistItem,
+    FeedbackPatient,
+    InboundKPIResponse,
+    KPICard,
+    MonthlyRevisitPoint,
+    PatientEngagementMeta,
+    PatientEngagementResponse,
+    PatientIntent,
+    RecentEscalation,
+    ResolutionStatusItem,
+    RevisitAnalyticsResponse,
+    TimeGapItem,
+)
 
 router = APIRouter(prefix="/inbound", tags=["dashboard-inbound"])
 
@@ -492,9 +498,9 @@ async def community_engagement_inbound(
                 patients=[
                     FeedbackPatient(
                         name=d.from_phone_number or "Unknown",
-                        date=d.created_at.strftime("%Y-%m-%d")
-                        if d.created_at
-                        else "N/A",
+                        date=(
+                            d.created_at.strftime("%Y-%m-%d") if d.created_at else "N/A"
+                        ),
                         feedback=d.remarks or "No remarks provided.",
                     )
                     for d in detail_rows

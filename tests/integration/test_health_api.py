@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 
-
 class TestHealthEndpoint:
     def test_health_returns_200(self, sync_client) -> None:
         response = sync_client.get("/health")

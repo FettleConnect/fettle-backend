@@ -5,8 +5,7 @@ import uuid
 from datetime import timedelta
 from typing import Any, Optional, cast
 
-from fastapi import (APIRouter, Depends, HTTPException, Request,
-                     status)
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select, update
@@ -15,8 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.app.core.security import TokenError, create_access_token, decode_token
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
-from api.app.models.hospital.dermatology import (DermatologyPatient,
-                                                 DermatologyThread)
+from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.organization import Organization
 from api.app.services.llm import llm_client, openrouter_model
 

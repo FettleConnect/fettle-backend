@@ -1,22 +1,44 @@
 from __future__ import annotations
 
+
 class TestModelsImportable:
     def test_import_all_models(self) -> None:
-        from api.app.models import (ActivityBooking,  # noqa: F401
-                                    BodyComposition, Campaign, Comment,
-                                    CommentLike, CorporateConfig,
-                                    DermatologyPatient, DermatologyThread,
-                                    Escalation, GlobalConfig, HospitalConfig,
-                                    HospitalUploadLog, InboundCall,
-                                    InboundCommunityEngagement,
-                                    InboundEscalation, InboundFeedback,
-                                    MediVoiceSession, MediVoiceTranscription,
-                                    Notification, Organization, OutboundCall,
-                                    OutdoorActivity, Package, Patient, Post,
-                                    PostLike, SessionBooking, SupportTicket,
-                                    Therapist, TherapistBooking, User,
-                                    UserSavedPost, WellnessSession,
-                                    WellnessVideo)
+        from api.app.models import (
+            ActivityBooking,  # noqa: F401
+            BodyComposition,
+            Campaign,
+            Comment,
+            CommentLike,
+            CorporateConfig,
+            DermatologyPatient,
+            DermatologyThread,
+            Escalation,
+            GlobalConfig,
+            HospitalConfig,
+            HospitalUploadLog,
+            InboundCall,
+            InboundCommunityEngagement,
+            InboundEscalation,
+            InboundFeedback,
+            MediVoiceSession,
+            MediVoiceTranscription,
+            Notification,
+            Organization,
+            OutboundCall,
+            OutdoorActivity,
+            Package,
+            Patient,
+            Post,
+            PostLike,
+            SessionBooking,
+            SupportTicket,
+            Therapist,
+            TherapistBooking,
+            User,
+            UserSavedPost,
+            WellnessSession,
+            WellnessVideo,
+        )
 
     def test_organization_table_name(self) -> None:
         from api.app.models.organization import Organization
