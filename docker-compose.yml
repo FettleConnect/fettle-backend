@@ -44,6 +44,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       INTERNAL_API_BASE_URL: http://api:8000
       INTERNAL_API_SHARED_SECRET: ${INTERNAL_API_SHARED_SECRET:-test-internal-secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test-openai-key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-test-openrouter-key}
     volumes:
       - ./api/app:/app/app:rw
       - ./tests:/app/tests:rw
