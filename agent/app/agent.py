@@ -577,7 +577,6 @@ async def infrastructure_guard() -> None:
                 f"{_internal_api_base()}/api/v1/tenant/hospitals",
                 headers={
                     "X-Internal-API-Secret": secret,
-                    "Authorization": "Bearer skip-auth",
                 },
             )
             if resp.status_code != 200:
@@ -596,6 +595,9 @@ async def infrastructure_guard() -> None:
         logger.warning("Guard skipped: LIVEKIT_API_KEY not set")
         return
 
+    await _ensure_outbound_infrastructure()
+
+    ensured_routes = 0
     for hosp in hospitals:
         org_id = hosp.get("id", "")
         name = hosp.get("name", "Hospital")
@@ -615,13 +617,192 @@ async def infrastructure_guard() -> None:
                 if not vobiz_did:
                     continue
 
-            from api.app.services.livekit import ensure_infrastructure as _ensure
-
-            await _ensure(
-                organization_id=org_id, hospital_name=name, vobiz_did=vobiz_did
+            await _ensure_inbound_infrastructure(
+                organization_id=org_id,
+                hospital_name=name,
+                vobiz_did=vobiz_did,
             )
+            ensured_routes += 1
         except Exception as exc:
             logger.error("Guard: failed for %s: %s", name, exc)
+
+    if ensured_routes == 0:
+        await _ensure_global_inbound_dispatch_rule()
+
+
+async def _ensure_outbound_infrastructure() -> None:
+    """Restore the outbound trunk shape from the working legacy backend."""
+    from livekit import api as lk_api
+
+    api_key = os.environ.get("LIVEKIT_API_KEY", "")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
+    if not api_key or not api_secret:
+        logger.warning("Guard skipped: LiveKit credentials not set")
+        return
+
+    livekit_url = os.environ.get(
+        "LIVEKIT_URL_INTERNAL",
+        os.environ.get("LIVEKIT_URL", "http://livekit-server:7880"),
+    )
+    trunk_name = os.environ.get(
+        "LIVEKIT_SIP_OUTBOUND_TRUNK_NAME", "Vobiz_Outbound_Final_V2"
+    )
+    outbound_number = os.environ.get(
+        "SIP_OUTBOUND_NUMBER",
+        os.environ.get("VOBIZ_DID", "+918049280487"),
+    )
+
+    async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
+        trunks = await lk.sip.list_outbound_trunk(lk_api.ListSIPOutboundTrunkRequest())
+        if any(trunk.name == trunk_name for trunk in trunks.items):
+            logger.info("Guard: outbound trunk is healthy")
+            return
+
+        logger.info("Guard: creating outbound trunk %s", trunk_name)
+        await lk.sip.create_outbound_trunk(
+            lk_api.CreateSIPOutboundTrunkRequest(
+                trunk=lk_api.SIPOutboundTrunkInfo(
+                    name=trunk_name,
+                    address=os.environ.get("SIP_OUTBOUND_URI", "16099a52.sip.vobiz.ai"),
+                    numbers=[outbound_number],
+                    auth_username=os.environ.get("SIP_OUTBOUND_USERNAME", "fettle"),
+                    auth_password=os.environ.get("SIP_OUTBOUND_PASSWORD", "$fettle"),
+                    transport=lk_api.SIPTransport.SIP_TRANSPORT_UDP,
+                )
+            )
+        )
+        logger.info("Guard: outbound trunk created")
+
+
+async def _ensure_global_inbound_dispatch_rule() -> None:
+    """Reference fallback: route any inbound SIP trunk to inbound_* rooms."""
+    from livekit import api as lk_api
+
+    api_key = os.environ.get("LIVEKIT_API_KEY", "")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
+    if not api_key or not api_secret:
+        logger.warning("Guard skipped: LiveKit credentials not set")
+        return
+
+    livekit_url = os.environ.get(
+        "LIVEKIT_URL_INTERNAL",
+        os.environ.get("LIVEKIT_URL", "http://livekit-server:7880"),
+    )
+    rule_name = "Inbound_Routing_Rule"
+    trunk_id = os.environ.get("LIVEKIT_SIP_TRUNK_ID", "").strip()
+
+    async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
+        rules = await lk.sip.list_dispatch_rule(lk_api.ListSIPDispatchRuleRequest())
+        if any(rule.name == rule_name for rule in rules.items):
+            logger.info("Guard: global inbound dispatch rule is healthy")
+            return
+
+        logger.info("Guard: creating global inbound dispatch rule")
+        request = _global_inbound_rule_request(lk_api, rule_name, trunk_id)
+
+        try:
+            await lk.sip.create_dispatch_rule(request)
+        except Exception:
+            if not trunk_id:
+                raise
+            logger.warning(
+                "Guard: retrying global inbound rule without LIVEKIT_SIP_TRUNK_ID"
+            )
+            await lk.sip.create_dispatch_rule(
+                _global_inbound_rule_request(lk_api, rule_name, "")
+            )
+        logger.info("Guard: global inbound dispatch rule created")
+
+
+def _global_inbound_rule_request(lk_api: Any, rule_name: str, trunk_id: str):
+    request = lk_api.CreateSIPDispatchRuleRequest(
+        name=rule_name,
+        rule=lk_api.SIPDispatchRule(
+            dispatch_rule_individual=lk_api.SIPDispatchRuleIndividual(
+                room_prefix="inbound_",
+            )
+        ),
+        room_config=lk_api.RoomConfiguration(
+            metadata=json.dumps({"type": "inbound"}),
+            agents=[lk_api.RoomAgentDispatch(agent_name="my-agent")],
+        ),
+    )
+    if trunk_id:
+        request.trunk_ids.append(trunk_id)
+    return request
+
+
+async def _ensure_inbound_infrastructure(
+    organization_id: str,
+    hospital_name: str,
+    vobiz_did: str,
+) -> None:
+    from livekit import api as lk_api
+
+    api_key = os.environ.get("LIVEKIT_API_KEY", "")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
+    if not api_key or not api_secret:
+        logger.warning(
+            "Guard skipped for %s: LiveKit credentials not set", hospital_name
+        )
+        return
+
+    livekit_url = os.environ.get(
+        "LIVEKIT_URL_INTERNAL",
+        os.environ.get("LIVEKIT_URL", "http://livekit-server:7880"),
+    )
+    did_digits = vobiz_did.replace("+", "")
+    trunk_name = f"Inbound_{did_digits}"
+    rule_name = f"Route_{did_digits}"
+
+    async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
+        inbound_trunks = await lk.sip.list_inbound_trunk(
+            lk_api.ListSIPInboundTrunkRequest()
+        )
+        existing_trunk = next(
+            (trunk for trunk in inbound_trunks.items if trunk.name == trunk_name), None
+        )
+        if existing_trunk:
+            inbound_trunk_id = existing_trunk.sip_trunk_id
+        else:
+            logger.info(
+                "Guard: creating inbound trunk for %s (%s)", hospital_name, vobiz_did
+            )
+            created = await lk.sip.create_inbound_trunk(
+                lk_api.CreateSIPInboundTrunkRequest(
+                    trunk=lk_api.SIPInboundTrunkInfo(
+                        name=trunk_name,
+                        numbers=[vobiz_did],
+                    )
+                )
+            )
+            inbound_trunk_id = created.sip_trunk_id
+
+        rules = await lk.sip.list_dispatch_rule(lk_api.ListSIPDispatchRuleRequest())
+        if not any(rule.name == rule_name for rule in rules.items):
+            logger.info("Guard: creating dispatch rule for %s", vobiz_did)
+            await lk.sip.create_dispatch_rule(
+                lk_api.CreateSIPDispatchRuleRequest(
+                    name=rule_name,
+                    trunk_ids=[inbound_trunk_id],
+                    rule=lk_api.SIPDispatchRule(
+                        dispatch_rule_individual=lk_api.SIPDispatchRuleIndividual(
+                            room_prefix=f"inbound_{did_digits}_",
+                        )
+                    ),
+                    room_config=lk_api.RoomConfiguration(
+                        metadata=json.dumps(
+                            {
+                                "organization_id": organization_id,
+                                "hospital_name": hospital_name,
+                                "type": "inbound",
+                            }
+                        ),
+                        agents=[lk_api.RoomAgentDispatch(agent_name="my-agent")],
+                    ),
+                )
+            )
+        logger.info("Guard: infrastructure healthy for %s", hospital_name)
 
 
 if __name__ == "__main__":

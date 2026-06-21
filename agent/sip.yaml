@@ -1,0 +1,11 @@
+ws_url: ws://livekit-server:7880
+
+redis:
+  address: redis:6379
+
+sip_port: 5061
+rtp_port: 40000-40100
+use_external_ip: true
+
+logging:
+  level: debug

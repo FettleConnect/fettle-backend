@@ -8,8 +8,8 @@ from api.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Trunk name used when per-hospital trunk ID is not configured
-_DEFAULT_OUTBOUND_TRUNK_NAME = "Vobiz_Outbound_V5"
+# Trunk name used when per-hospital trunk ID is not configured.
+_DEFAULT_OUTBOUND_TRUNK_NAME = "Vobiz_Outbound_Final_V2"
 
 
 def _livekit_url() -> str:
@@ -67,11 +67,26 @@ async def dispatch_outbound_call(
             # 1. Resolve outbound SIP trunk
             outbound_trunk_id = sip_trunk_id
             if not outbound_trunk_id:
+                env_trunk_id = os.environ.get("LIVEKIT_SIP_OUTBOUND_TRUNK_ID", "")
                 trunks = await lk.sip.list_outbound_trunk(
                     lk_api.ListSIPOutboundTrunkRequest()
                 )
+                if env_trunk_id and any(
+                    t.sip_trunk_id == env_trunk_id for t in trunks.items
+                ):
+                    outbound_trunk_id = env_trunk_id
+
+            if not outbound_trunk_id:
                 target = next(
-                    (t for t in trunks.items if t.name == _DEFAULT_OUTBOUND_TRUNK_NAME),
+                    (
+                        t
+                        for t in trunks.items
+                        if t.name
+                        == os.environ.get(
+                            "LIVEKIT_SIP_OUTBOUND_TRUNK_NAME",
+                            _DEFAULT_OUTBOUND_TRUNK_NAME,
+                        )
+                    ),
                     None,
                 )
                 if not target:
