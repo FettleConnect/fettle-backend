@@ -14,8 +14,7 @@ async def _hospital_setup(async_client: AsyncClient, db_session: AsyncSession) -
     """Returns (org_id, token, patient_id, doctor_id)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import (CallFeedback, Escalation,
-                                              InboundCall)
+    from api.app.models.hospital.call import CallFeedback, Escalation, InboundCall
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import HospitalConfig, Organization
 
@@ -184,6 +183,38 @@ class TestDepartmentAnalytics:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
+
+
+class TestLegacyHospitalAliases:
+    async def test_legacy_fetchpatients_alias(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        _, token, patient_id, _ = await _hospital_setup(async_client, db_session)
+
+        resp = await async_client.get(
+            "/api/fetchpatients/",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["error"] == 0
+        assert any(row["id"] == str(patient_id) for row in body["data"])
+
+    async def test_legacy_roi_metrics_alias(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        _, token, _, _ = await _hospital_setup(async_client, db_session)
+
+        resp = await async_client.get(
+            "/api/roi_metrics/?call_direction=outbound",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["error"] == 0
+        assert "roi_financial" in body
 
 
 class TestCampaignCRUD:

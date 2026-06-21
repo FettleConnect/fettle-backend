@@ -14,8 +14,7 @@ async def _full_setup(async_client: AsyncClient, db_session: AsyncSession) -> tu
     """Create org + admin user + patients + feedback. Returns (org_id, token)."""
     from api.app.core.security import hash_password
     from api.app.models.auth import User
-    from api.app.models.hospital.call import (CallFeedback,
-                                              Escalation)
+    from api.app.models.hospital.call import CallFeedback, Escalation
     from api.app.models.hospital.patient import Patient
     from api.app.models.organization import Organization
 

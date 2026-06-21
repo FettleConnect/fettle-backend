@@ -10,6 +10,7 @@ from datetime import timedelta, timezone
 from typing import Any, cast
 
 import boto3
+import redis as _redis_lib
 from asgiref.sync import async_to_sync
 from sqlalchemy import select, update
 
@@ -17,7 +18,6 @@ from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on impo
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
 from api.app.services.llm import llm_client, openrouter_model
-import redis as _redis_lib
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def json_audio(patient_id: str, text: str, called_at: str, duration: float) -> d
             temperature=0.2,
             response_format={"type": "json_object"},
         )
-        parsed = json.loads(response.choices[0].message.content)
+        parsed = json.loads(response.choices[0].message.content or "{}")
         parsed["patient_id"] = patient_id
         parsed["called_at"] = called_at
         parsed["call_duration"] = duration
@@ -252,6 +252,126 @@ async def _create_outbound_call(
         return str(call.id)
 
 
+def _datetime_or_none(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _first(payload: dict[str, Any], *keys: str) -> Any:
+    return next((payload[key] for key in keys if payload.get(key) is not None), None)
+
+
+async def _resolve_inbound_organization_id(
+    payload: dict[str, Any],
+) -> uuid.UUID | None:
+    from api.app.models.organization import HospitalConfig, Organization
+
+    organization_id = _first(payload, "organization_id", "org_id", "hospital_id")
+    if organization_id:
+        try:
+            org_uuid = uuid.UUID(str(organization_id))
+        except ValueError:
+            org_uuid = None
+        if org_uuid:
+            async with AsyncSessionLocal() as session:
+                org = await session.scalar(
+                    select(Organization).where(Organization.id == org_uuid)
+                )
+                if org:
+                    return org_uuid
+
+    to_num = _first(payload, "to_phone_number", "to_phone_numnber", "to", "To")
+    if not to_num:
+        return None
+
+    to_num = str(to_num).strip()
+    async with AsyncSessionLocal() as session:
+        cfg = await session.scalar(
+            select(HospitalConfig).where(HospitalConfig.vobiz_did == to_num)
+        )
+        if cfg:
+            return cfg.organization_id
+
+        suffix = to_num[-10:] if len(to_num) >= 10 else to_num
+        cfg = await session.scalar(
+            select(HospitalConfig).where(HospitalConfig.vobiz_did.like(f"%{suffix}"))
+        )
+        return cfg.organization_id if cfg else None
+
+
+async def _upsert_inbound_call(payload: dict[str, Any]) -> str | None:
+    from api.app.models.hospital.call import InboundCall
+
+    room_id = _first(payload, "livekit_call_id", "vapi_id", "call_id", "id", "CallUUID")
+    org_id = await _resolve_inbound_organization_id(payload)
+
+    async with AsyncSessionLocal() as session:
+        existing = None
+        if room_id:
+            existing = await session.scalar(
+                select(InboundCall).where(InboundCall.livekit_call_id == str(room_id))
+            )
+
+        status = _first(payload, "status", "CallStatus")
+        ended_reason = _first(payload, "ended_reason", "endedReason")
+        started_at = _datetime_or_none(_first(payload, "started_at", "startedAt"))
+        ended_at = _datetime_or_none(_first(payload, "ended_at", "endedAt"))
+
+        if existing:
+            existing.status = status or existing.status
+            existing.ended_reason = ended_reason or existing.ended_reason
+            existing.ended_at = ended_at or existing.ended_at
+            existing.message_s3_link = (
+                _first(payload, "message_s3_link", "transcript_url", "transcript")
+                or existing.message_s3_link
+            )
+            existing.audio_s3_link = (
+                _first(payload, "audio_s3_link", "audio_link", "recording_url")
+                or existing.audio_s3_link
+            )
+            existing.task_id = payload.get("task_id", existing.task_id)
+            existing.calling_process = payload.get(
+                "calling_process", existing.calling_process
+            )
+            await session.commit()
+            return str(existing.id)
+
+        if org_id is None:
+            return None
+
+        call = InboundCall(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            livekit_call_id=str(room_id) if room_id else None,
+            status=status,
+            ended_reason=ended_reason,
+            started_at=started_at or datetime.now(tz=timezone.utc),
+            ended_at=ended_at,
+            message_s3_link=_first(
+                payload, "message_s3_link", "transcript_url", "transcript"
+            ),
+            audio_s3_link=_first(
+                payload, "audio_s3_link", "audio_link", "recording_url"
+            ),
+            task_id=payload.get("task_id"),
+            calling_process=payload.get("calling_process", "received"),
+            from_phone_number=_first(payload, "from_phone_number", "from", "From"),
+            to_phone_number=_first(
+                payload, "to_phone_number", "to_phone_numnber", "to", "To"
+            ),
+            department=payload.get("department", "N/A"),
+        )
+        session.add(call)
+        await session.commit()
+        return str(call.id)
+
+
 async def _update_outbound_call(call_id: str, **fields) -> None:
     from api.app.models.hospital.call import OutboundCall
 
@@ -341,10 +461,12 @@ async def _create_inbound_feedback(
     ai_result: dict,
     call_duration: float,
 ) -> None:
-    from api.app.models.hospital.call import (InboundCall,
-                                              InboundCommunityEngagement,
-                                              InboundEscalation,
-                                              InboundFeedback)
+    from api.app.models.hospital.call import (
+        InboundCall,
+        InboundCommunityEngagement,
+        InboundEscalation,
+        InboundFeedback,
+    )
 
     async with AsyncSessionLocal() as session:
         inbound_id = uuid.UUID(inbound_call_id)
@@ -635,6 +757,24 @@ def process_outbound_calls(self, json_payload: dict):
 
     except Exception as exc:
         logger.exception("process_outbound_calls error")
+        return {"error": 1, "msg": str(exc)}
+
+
+@celery_app.task(
+    bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3
+)
+def inbound_call_task(self, json_payload: dict[str, Any]) -> dict[str, Any]:
+    """Compatibility task for legacy inbound POSTs; stores current InboundCall rows."""
+    try:
+        call_id = async_to_sync(_upsert_inbound_call)(json_payload)
+        if call_id is None:
+            return {
+                "error": 1,
+                "msg": "Unable to resolve organization for inbound call",
+            }
+        return {"error": 0, "id": call_id, "status": "persisted"}
+    except Exception as exc:
+        logger.exception("inbound_call_task error")
         return {"error": 1, "msg": str(exc)}
 
 

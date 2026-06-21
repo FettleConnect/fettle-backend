@@ -8,8 +8,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.db.session import get_async_session
-from api.app.models.hospital.call import (CallFeedback, Escalation,
-                                          InboundCall, OutboundCall)
+from api.app.models.hospital.call import (
+    CallFeedback,
+    Escalation,
+    InboundCall,
+    OutboundCall,
+)
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import Organization
 

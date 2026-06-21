@@ -19,5 +19,6 @@ pandas>=2.1.0
 openpyxl>=3.1.0
 humanize>=4.9.0
 livekit>=0.17.0
+livekit-api>=1.0.0,<2.0
 openai>=1.0.0
 redis>=4.0.0

@@ -34,14 +34,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("port_legacy")
@@ -157,22 +155,26 @@ class LegacyPorter:
 
             # Upsert Organization
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO organizations (id, name, slug, type, is_active, created_at, updated_at)
                 VALUES (:id, :name, :slug, 'hospital', true, now(), now())
                 ON CONFLICT (id) DO NOTHING
-            """),
+            """
+                ),
                 {"id": org_id, "name": r.name, "slug": slug},
             )
 
             # Upsert HospitalConfig
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO hospital_configs (id, organization_id, reception_email, pharmacy_email,
                     branding_json, created_at, updated_at)
                 VALUES (:id, :org_id, :re, :pe, '{}', now(), now())
                 ON CONFLICT (organization_id) DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": uuid.uuid4(),
                     "org_id": org_id,
@@ -184,14 +186,20 @@ class LegacyPorter:
     # ── Hospital users (staff) ────────────────────────────────────────────────
 
     async def _port_users(self, legacy: AsyncSession, target: AsyncSession) -> None:
-        rows = (await legacy.execute(text("""
+        rows = (
+            await legacy.execute(
+                text(
+                    """
             SELECT u.id, u.name, u.password_hash, u.patient_engagement,
                    u.community_egagement, u.revisit_engagement, u.escalation_engagement,
                    u.calllog_engagement, u.upload_engagement, u.pdf_engagement,
                    h.id as hospital_id
             FROM app_hospital_user_model u
             JOIN app_hospital_model h ON u.hospital_id = h.id
-        """))).fetchall()
+        """
+                )
+            )
+        ).fetchall()
 
         log.info("Porting %d hospital users", len(rows))
         for r in rows:
@@ -208,7 +216,8 @@ class LegacyPorter:
             self.user_map[str(r.id)] = user_id
 
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO users (id, organization_id, email, password_hash, name, role,
                     perm_patient_engagement, perm_community_engagement, perm_revisit_engagement,
                     perm_escalation_engagement, perm_calllog_engagement, perm_upload_engagement,
@@ -216,7 +225,8 @@ class LegacyPorter:
                 VALUES (:id, :org_id, :email, :pw, :name, 'hospital_user',
                     :pe, :ce, :re, :ee, :cl, :ue, :pdf, true, now(), now())
                 ON CONFLICT (organization_id, email) DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": user_id,
                     "org_id": org_id,
@@ -251,12 +261,14 @@ class LegacyPorter:
             self.user_map[str(r.id)] = user_id
 
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO users (id, organization_id, email, password_hash, name, role,
                     is_active, created_at, updated_at)
                 VALUES (:id, :org_id, :email, :pw, :email, 'hospital_admin', true, now(), now())
                 ON CONFLICT (organization_id, email) DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": user_id,
                     "org_id": org_id,
@@ -268,12 +280,18 @@ class LegacyPorter:
     # ── Doctors ───────────────────────────────────────────────────────────────
 
     async def _port_doctors(self, legacy: AsyncSession, target: AsyncSession) -> None:
-        rows = (await legacy.execute(text("""
+        rows = (
+            await legacy.execute(
+                text(
+                    """
             SELECT d.id, d.name, d.email, d.password_hash, d.mobile_number, d.department,
                    d.availability, d.timings, d.consultation_fee, h.id as hospital_id
             FROM app_doctor_model d
             JOIN app_hospital_model h ON d.hospital_id = h.id
-        """))).fetchall()
+        """
+                )
+            )
+        ).fetchall()
 
         log.info("Porting %d doctors", len(rows))
         for r in rows:
@@ -284,14 +302,16 @@ class LegacyPorter:
             self.user_map[str(r.id)] = user_id
 
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO users (id, organization_id, email, password_hash, name, role,
                     mobile_number, department, availability_json, timings, consultation_fee,
                     is_active, created_at, updated_at)
                 VALUES (:id, :org_id, :email, :pw, :name, 'doctor',
                     :mob, :dept, :avail::jsonb, :timings, :fee, true, now(), now())
                 ON CONFLICT (organization_id, email) DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": user_id,
                     "org_id": org_id,
@@ -309,10 +329,16 @@ class LegacyPorter:
     # ── Patients ──────────────────────────────────────────────────────────────
 
     async def _port_patients(self, legacy: AsyncSession, target: AsyncSession) -> None:
-        rows = (await legacy.execute(text("""
+        rows = (
+            await legacy.execute(
+                text(
+                    """
             SELECT id, hospital_id, serial_no, patient_name, age, mobile_no, department, uploaded_at
             FROM app_patient_model
-        """))).fetchall()
+        """
+                )
+            )
+        ).fetchall()
 
         log.info("Porting %d patients (no-date)", len(rows))
         for r in rows:
@@ -320,12 +346,14 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO patients (id, organization_id, serial_no, patient_name, age,
                     mobile_no, department, visit_date, uploaded_at)
                 VALUES (:id, :org_id, :sno, :name, :age, :mob, :dept, NULL, :up)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -340,11 +368,17 @@ class LegacyPorter:
 
         # Patient_date_model (with visit date)
         try:
-            date_rows = (await legacy.execute(text("""
+            date_rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT id, hospital_id, serial_no, patient_name, age, mobile_no,
                        department, date, uploaded_at
                 FROM app_patient_date_model
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
 
             log.info("Porting %d dated patients", len(date_rows))
             for r in date_rows:
@@ -352,12 +386,14 @@ class LegacyPorter:
                 if not org_id:
                     continue
                 await target.execute(
-                    text("""
+                    text(
+                        """
                     INSERT INTO patients (id, organization_id, serial_no, patient_name, age,
                         mobile_no, department, visit_date, uploaded_at)
                     VALUES (:id, :org_id, :sno, :name, :age, :mob, :dept, :vd, :up)
                     ON CONFLICT DO NOTHING
-                """),
+                """
+                    ),
                     {
                         "id": _to_uuid(r.id) or uuid.uuid4(),
                         "org_id": org_id,
@@ -379,10 +415,16 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT id, hospital_id, file_names, status, message, uploaded_at
                 FROM app_hospitaluploadlog
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("HospitalUploadLog table not found, skipping")
             return
@@ -393,11 +435,13 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO hospital_upload_logs (id, organization_id, file_names, status, message, uploaded_at)
                 VALUES (:id, :org_id, :fn::jsonb, :st, :msg, :up)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -412,12 +456,18 @@ class LegacyPorter:
 
     async def _port_campaigns(self, legacy: AsyncSession, target: AsyncSession) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT id, hospital_id, name, template_type, audience_type, patient_ids,
                        package_name, facility_name, discount_details, purpose,
                        start_date, end_date, unconnected_only, status, created_at
                 FROM app_campaign
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("Campaign table not found, skipping")
             return
@@ -428,14 +478,16 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO campaigns (id, organization_id, name, template_type, audience_type,
                     patient_ids, package_name, facility_name, discount_details, purpose,
                     start_date, end_date, unconnected_only, status, created_at)
                 VALUES (:id, :org_id, :name, :tt, :at, :pids::jsonb, :pn, :fn, :dd, :purpose,
                     :sd, :ed, :uo, :st, :ca)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -461,14 +513,20 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT o.id, o.vapi_id, o.status, o."endedReason", o.started_at, o.ended_at,
                        o.message_s3_link, o.audio_link, o.task_id, o.calling_process,
                        o.patient_id_id as patient_id, o.campaign_id as campaign_id,
                        p.hospital_id
                 FROM phone_calling_outbound_hospital o
                 JOIN app_patient_model p ON o.patient_id_id = p.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("Outbound_Hospital table not found, skipping")
             return
@@ -479,13 +537,15 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO outbound_calls (id, organization_id, patient_id, campaign_id,
                     livekit_call_id, status, ended_reason, calling_process,
                     started_at, ended_at, message_s3_link, audio_s3_link, task_id, created_at)
                 VALUES (:id, :org_id, :pid, :cid, :room, :st, :er, :cp, :sa, :ea, :ml, :al, :tid, now())
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -509,12 +569,18 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT id, hospital_id, vapi_id, status, "endedReason", started_at, ended_at,
                        message_s3_link, audio_link, task_id, calling_process,
                        from_phone_number, to_phone_numnber, department
                 FROM phone_calling_inbound_hospital
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("Inbound_Hospital table not found, skipping")
             return
@@ -525,7 +591,8 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO inbound_calls (id, organization_id, livekit_call_id, status,
                     ended_reason, calling_process, from_phone_number, to_phone_number,
                     department, started_at, ended_at, message_s3_link, audio_s3_link,
@@ -533,7 +600,8 @@ class LegacyPorter:
                 VALUES (:id, :org_id, :room, :st, :er, :cp, :from_n, :to_n, :dept,
                     :sa, :ea, :ml, :al, :tid, now())
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -558,14 +626,20 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT f.id, f.patient_id, f.call_status, f.call_outcome, f.remarks,
                        f.community_added, f.revisit_encouraged, f.escalation_required,
                        f.call_duration, f.called_by, f.called_at, f.created_at,
                        p.hospital_id
                 FROM app_callfeedbackmodel f
                 JOIN app_patient_model p ON f.patient_id = p.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("CallFeedbackModel table not found, skipping")
             return
@@ -576,13 +650,15 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO call_feedback (id, organization_id, patient_id, call_status,
                     call_outcome, remarks, community_added, revisit_encouraged,
                     escalation_required, call_duration, called_by, called_at, created_at)
                 VALUES (:id, :org_id, :pid, :cs, :co, :rem, :ca, :re, :er, :dur, :cb, :calt, :crt)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -606,12 +682,18 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT e.id, e.patient_id, e.issue_description, e.status, e.department,
                        e.escalated_at, e.resolved_at, e.resolution_notes, p.hospital_id
                 FROM app_escalationmodel e
                 JOIN app_patient_model p ON e.patient_id = p.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("EscalationModel table not found, skipping")
             return
@@ -622,12 +704,14 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO escalations (id, organization_id, patient_id, issue_description,
                     status, department, escalated_at, resolved_at, resolution_notes)
                 VALUES (:id, :org_id, :pid, :issue, :st, :dept, :ea, :ra, :rn)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -647,12 +731,18 @@ class LegacyPorter:
         self, legacy: AsyncSession, target: AsyncSession
     ) -> None:
         try:
-            rows = (await legacy.execute(text("""
+            rows = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT c.id, c.patient_id, c.engagement_type, c.engagement_date, c.department, c.created_at,
                        p.hospital_id
                 FROM app_communityengagementmodel c
                 JOIN app_patient_model p ON c.patient_id = p.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("CommunityEngagementModel table not found, skipping")
             return
@@ -663,12 +753,14 @@ class LegacyPorter:
             if not org_id:
                 continue
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO community_engagements (id, organization_id, patient_id,
                     engagement_type, engagement_date, department, created_at)
                 VALUES (:id, :org_id, :pid, :et, :ed, :dept, :crt)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": _to_uuid(r.id) or uuid.uuid4(),
                     "org_id": org_id,
@@ -684,13 +776,19 @@ class LegacyPorter:
 
     async def _port_medivoice(self, legacy: AsyncSession, target: AsyncSession) -> None:
         try:
-            sessions = (await legacy.execute(text("""
+            sessions = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT s.id, s.doctor_id, s.patient_name, s.patient_mobile, s.patient_email,
                        s.overall_summary, s.diagnosis, s.medicines, s.revisit_date,
                        s.revisit_time, s.meta_data, s.created_at, d.hospital_id
                 FROM app_medivoicesession s
                 JOIN app_doctor_model d ON s.doctor_id = d.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
         except Exception:
             log.warning("MediVoiceSession table not found, skipping")
             return
@@ -704,14 +802,16 @@ class LegacyPorter:
 
             session_id = _to_uuid(r.id) or uuid.uuid4()
             await target.execute(
-                text("""
+                text(
+                    """
                 INSERT INTO medivoice_sessions (id, organization_id, doctor_id, patient_name,
                     patient_mobile, patient_email, overall_summary, diagnosis, medicines,
                     revisit_date, revisit_time, meta_data, created_at)
                 VALUES (:id, :org_id, :doc, :pn, :pm, :pe, :os, :dx, :med::jsonb,
                     :rd, :rt, :meta::jsonb, :ca)
                 ON CONFLICT DO NOTHING
-            """),
+            """
+                ),
                 {
                     "id": session_id,
                     "org_id": org_id,
@@ -731,13 +831,19 @@ class LegacyPorter:
 
         # Transcriptions
         try:
-            trans = (await legacy.execute(text("""
+            trans = (
+                await legacy.execute(
+                    text(
+                        """
                 SELECT t.id, t.session_id, t.speaker, t.text, t.timestamp, t.created_at,
                        s.doctor_id, d.hospital_id
                 FROM app_medivoicetranscription t
                 JOIN app_medivoicesession s ON t.session_id = s.id
                 JOIN app_doctor_model d ON s.doctor_id = d.id
-            """))).fetchall()
+            """
+                    )
+                )
+            ).fetchall()
 
             log.info("Porting %d MediVoice transcriptions", len(trans))
             for r in trans:
@@ -745,12 +851,14 @@ class LegacyPorter:
                 if not org_id:
                     continue
                 await target.execute(
-                    text("""
+                    text(
+                        """
                     INSERT INTO medivoice_transcriptions (id, organization_id, session_id,
                         speaker, text, timestamp, created_at)
                     VALUES (:id, :org_id, :sid, :sp, :txt, :ts, :ca)
                     ON CONFLICT DO NOTHING
-                """),
+                """
+                    ),
                     {
                         "id": _to_uuid(r.id) or uuid.uuid4(),
                         "org_id": org_id,

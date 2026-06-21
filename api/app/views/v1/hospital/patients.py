@@ -6,22 +6,25 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 import pandas as pd
-from fastapi import (APIRouter, Depends, File, HTTPException, Query,
-                     UploadFile, status)
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.call import InboundCall, OutboundCall
 from api.app.models.hospital.patient import HospitalUploadLog, Patient
 from api.app.models.organization import Organization
-from api.app.schemas.hospital.patient import (CallHistoryItem,
-                                              PatientCallHistoryResponse,
-                                              PatientListResponse, PatientOut,
-                                              UploadLogOut, UploadLogsResponse)
+from api.app.schemas.hospital.patient import (
+    CallHistoryItem,
+    PatientCallHistoryResponse,
+    PatientListResponse,
+    PatientOut,
+    UploadLogOut,
+    UploadLogsResponse,
+)
 from api.app.services.s3 import get_presigned_url
+from api.app.views.deps import get_current_user
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 

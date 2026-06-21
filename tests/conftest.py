@@ -5,6 +5,7 @@ import os
 import sys
 import uuid
 from collections.abc import AsyncGenerator
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 import pytest_asyncio
@@ -15,19 +16,26 @@ if sys.platform == "win32":
 
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
-                                    create_async_engine)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # ── Set required env vars BEFORE any app imports ──────────────────────────────
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")
-os.environ.setdefault(
-    "DATABASE_URL",
-    os.getenv(
-        "TEST_DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
-    ),
+os.environ["DEBUG"] = "false"
+os.environ["DATABASE_URL"] = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
 )
 os.environ.setdefault("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
+os.environ.setdefault("INTERNAL_API_BASE_URL", "http://test")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+os.environ.setdefault("LIVEKIT_URL_INTERNAL", "http://localhost:7880")
+os.environ.setdefault("LIVEKIT_URL", "")
+os.environ.setdefault("LIVEKIT_API_KEY", "")
+os.environ.setdefault("LIVEKIT_API_SECRET", "")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
 
 from unittest.mock import MagicMock, patch
 
@@ -45,27 +53,45 @@ TEST_DB_URL = (
 )
 
 
+def _sync_postgres_url(url: str) -> str:
+    return url.replace("postgresql+psycopg_async://", "postgresql://").replace(
+        "postgresql+psycopg://", "postgresql://"
+    )
+
+
+def _admin_database_url(sync_url: str) -> tuple[str, str] | None:
+    parsed = urlparse(sync_url)
+    database_name = parsed.path.lstrip("/")
+    if not database_name:
+        return None
+    admin_url = urlunparse(parsed._replace(path="/postgres"))
+    return admin_url, database_name
+
+
 def _check_postgres_available() -> bool:
-    """Returns True if PostgreSQL is reachable at the test URL."""
+    """Ensure the configured test database exists when PostgreSQL is reachable."""
     try:
-        import re
-
         import psycopg
+        from psycopg import sql
 
-        sync_url = TEST_DB_URL.replace("postgresql+psycopg_async://", "")
-        m = re.match(r"(\w+):([^@]*)@([^:/]+):?(\d+)?/(\w+)", sync_url)
-        if not m:
+        sync_url = _sync_postgres_url(TEST_DB_URL)
+        admin_parts = _admin_database_url(sync_url)
+        if admin_parts is None:
             return False
-        user, pw, host, port, db = m.groups()
-        conn = psycopg.connect(
-            host=host,
-            port=int(port or 5432),
-            dbname="postgres",
-            user=user,
-            password=pw,
-            connect_timeout=3,
-        )
-        conn.close()
+        admin_url, database_name = admin_parts
+
+        with psycopg.connect(admin_url, autocommit=True, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s",
+                    (database_name,),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        sql.SQL("CREATE DATABASE {}").format(
+                            sql.Identifier(database_name)
+                        )
+                    )
         return True
     except Exception:
         return False
@@ -75,7 +101,10 @@ _POSTGRES_AVAILABLE = _check_postgres_available()
 
 requires_db = pytest.mark.skipif(
     not _POSTGRES_AVAILABLE,
-    reason="PostgreSQL not reachable — start docker-compose.dev.yml to run integration tests",
+    reason=(
+        "PostgreSQL not reachable - start the compose db service or set "
+        "TEST_DATABASE_URL to run integration tests"
+    ),
 )
 
 

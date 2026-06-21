@@ -12,6 +12,7 @@ from api.app.db.session import get_async_session
 from api.app.models.auth import User
 
 _bearer = HTTPBearer()
+_optional_bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
@@ -61,6 +62,16 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    session: AsyncSession = Depends(get_async_session),
+) -> User | None:
+    """Return the active user when a bearer token is present, otherwise None."""
+    if credentials is None:
+        return None
+    return await get_current_user(credentials=credentials, session=session)
 
 
 async def get_current_tenant(

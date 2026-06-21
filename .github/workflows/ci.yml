@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install linters
         run: |
@@ -38,15 +38,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
+      - name: Prepare test env
         run: |
-          python -m pip install --upgrade pip
-          pip install -r api/requirements.txt -r agent/requirements.txt pytest httpx
+          cp .env.example .env
 
       - name: Run tests
-        run: pytest
+        run: docker compose --profile test run --rm api-test
