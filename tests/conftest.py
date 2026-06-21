@@ -2,21 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import uuid
 from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
 import pytest
 import pytest_asyncio
-
-# Windows: psycopg async requires SelectorEventLoop, not the default ProactorEventLoop
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 
 # ── Set required env vars BEFORE any app imports ──────────────────────────────
 def _set_test_default(name: str, value: str) -> None:
@@ -41,8 +37,6 @@ _set_test_default("LIVEKIT_API_KEY", "")
 _set_test_default("LIVEKIT_API_SECRET", "")
 _set_test_default("OPENAI_API_KEY", "test-openai-key")
 _set_test_default("OPENROUTER_API_KEY", "test-openrouter-key")
-
-from unittest.mock import MagicMock, patch
 
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
