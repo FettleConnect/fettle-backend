@@ -11,16 +11,6 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.api.v1.chatbot import (
-    _DOCTOR_DRAFT_SYSTEM,
-    _chat_with_ai,
-    _create_patient_token,
-    _generate_doctor_draft,
-    _get_current_doctor,
-    _get_current_patient,
-    _get_or_create_thread,
-    _process_images,
-)
 from api.app.core.security import (
     TokenError,
     create_access_token,
@@ -32,6 +22,16 @@ from api.app.models.auth import User
 from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.organization import Organization
 from api.app.models.shared import GlobalConfig
+from api.app.views.v1.chatbot import (
+    _DOCTOR_DRAFT_SYSTEM,
+    _chat_with_ai,
+    _create_patient_token,
+    _generate_doctor_draft,
+    _get_current_doctor,
+    _get_current_patient,
+    _get_or_create_thread,
+    _process_images,
+)
 
 _GOOGLE_AUTH_ROUTER = APIRouter(tags=["auth-legacy"])
 _LEGACY_ROUTER = APIRouter(prefix="/api", tags=["legacy-compat"])
@@ -357,7 +357,9 @@ async def save_system_prompt(
 # ── Patient chat legacy aliases ───────────────────────────────────────────────
 
 
+# LEGACY: old Django ChatView also accepted GET /api/chat_view/.
 @_LEGACY_ROUTER.get("/chat_history/")
+@_LEGACY_ROUTER.get("/chat_view/")
 async def legacy_chat_history(
     thread_id: str | None = None,
     patient: DermatologyPatient = Depends(_get_current_patient),
@@ -384,14 +386,16 @@ async def legacy_chat_history(
     }
 
 
+# LEGACY: old Django ChatView also accepted POST /api/chat_history/.
 @_LEGACY_ROUTER.post("/chat_view/")
+@_LEGACY_ROUTER.post("/chat_history/")
 async def legacy_chat_view(
     request: Request,
     patient: DermatologyPatient = Depends(_get_current_patient),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Delegates to the main chatbot chat handler."""
-    from api.app.api.v1.chatbot import send_chat_message
+    from api.app.views.v1.chatbot import send_chat_message
 
     return await send_chat_message(request, patient, session)
 
@@ -470,6 +474,59 @@ class LegacyDoctorChatIn(BaseModel):
     systemPrompt: str | None = None
     contextData: str | None = None
     currentDraft: str | None = None
+
+
+# LEGACY: old Django DoctorChatAPIView accepted GET /api/doctor_chat_view/.
+@_LEGACY_ROUTER.get("/doctor_chat_view/")
+async def legacy_doctor_chat_list(
+    doctor: User = Depends(_get_current_doctor),
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    rows = (
+        await session.execute(
+            select(DermatologyThread, DermatologyPatient)
+            .join(
+                DermatologyPatient,
+                DermatologyThread.patient_id == DermatologyPatient.id,
+            )
+            .where(
+                DermatologyThread.organization_id == doctor.organization_id,
+                DermatologyThread.payment_status == "paid",
+            )
+            .order_by(DermatologyThread.created_at.desc())
+        )
+    ).all()
+
+    conversations = []
+    for thread, patient in rows:
+        intake = thread.intake_data or {}
+        images: list[str] = []
+        for url in intake.get("skin_images", []) + intake.get("report_images", []):
+            if url not in images:
+                images.append(url)
+        conversations.append(
+            {
+                "id": str(thread.id),
+                "patient_id": str(patient.id),
+                "patientEmail": patient.email,
+                "patientName": patient.name,
+                "mode": thread.mode,
+                "paymentStatus": thread.payment_status,
+                "status": thread.status,
+                "draftResponse": thread.draft_response or "",
+                "intakeData": {
+                    "duration": intake.get("duration", ""),
+                    "symptoms": intake.get("symptoms", ""),
+                    "location": intake.get("location", ""),
+                    "medicationsTried": intake.get("meds", ""),
+                    "priorDiagnoses": intake.get("prior_diagnoses", ""),
+                    "relevantHealthHistory": intake.get("history", ""),
+                    "images": images,
+                },
+                "messages": thread.conversation or [],
+            }
+        )
+    return {"conversations": conversations, "error": 0}
 
 
 @_LEGACY_ROUTER.post("/doctor_chat_view/")

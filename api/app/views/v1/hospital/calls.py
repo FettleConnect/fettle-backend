@@ -10,12 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.call import InboundCall, OutboundCall
 from api.app.models.hospital.campaign import Campaign
 from api.app.models.hospital.patient import Patient
+from api.app.views.deps import get_current_user
 
 router = APIRouter(tags=["calls"])
 

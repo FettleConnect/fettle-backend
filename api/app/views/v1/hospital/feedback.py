@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.call import (
@@ -33,6 +32,7 @@ from api.app.schemas.hospital.feedback import (
     UpdateCommunityIn,
     UpdateEscalationIn,
 )
+from api.app.views.deps import get_current_user
 
 router = APIRouter(tags=["feedback"])
 

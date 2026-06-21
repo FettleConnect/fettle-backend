@@ -13,11 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     pass
 
-from api.app.api.deps import get_current_user
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
 from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
 from api.app.models.organization import Organization
+from api.app.views.deps import get_current_user
 
 router = APIRouter(prefix="/medivoice", tags=["medivoice"])
 
