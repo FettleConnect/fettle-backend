@@ -19,6 +19,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Load project variables
+        env:
+          APP_BIND_PORT: ${{ secrets.APP_BIND_PORT }}
+          PUBLIC_PORT: ${{ secrets.PUBLIC_PORT }}
+          SERVER_NAME: ${{ secrets.SERVER_NAME }}
         run: |
           APP_NAME="${APP_NAME:-${GITHUB_REPOSITORY##*/}}"
           APP_BIND_PORT="${APP_BIND_PORT:-8000}"
@@ -135,6 +139,13 @@ jobs:
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SONIOX_API_KEY: ${{ secrets.SONIOX_API_KEY }}
+          VOBIZ_API_KEY: ${{ secrets.VOBIZ_API_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          INTERNAL_API_SHARED_SECRET: ${{ secrets.INTERNAL_API_SHARED_SECRET }}
         run: |
           printf '%s\n' \
             "API_IMAGE=${API_IMAGE}:${IMAGE_TAG}" \
@@ -151,7 +162,21 @@ jobs:
             "LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}" \
             "LIVEKIT_ROOM_NAME=default" \
             "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
-            "OPENROUTER_MODEL=openai/gpt-4o" > .vps.env
+            "OPENROUTER_MODEL=openai/gpt-4o" \
+            "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+            "SONIOX_API_KEY=${SONIOX_API_KEY}" \
+            "VOBIZ_API_URL=https://api.vobiz.ai" \
+            "VOBIZ_API_KEY=${VOBIZ_API_KEY}" \
+            "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
+            "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
+            "AWS_REGION=ap-south-1" \
+            "S3_BUCKET_NAME=fettle-media" \
+            "JWT_SECRET_KEY=${JWT_SECRET_KEY}" \
+            "INTERNAL_API_SHARED_SECRET=${INTERNAL_API_SHARED_SECRET}" \
+            "INTERNAL_API_BASE_URL=http://api:8000" \
+            "REDIS_URL=redis://redis:6379/0" \
+            "CELERY_BROKER_URL=redis://redis:6379/0" \
+            "CELERY_RESULT_BACKEND=redis://redis:6379/0" > .vps.env
 
           scp -P "${VPS_PORT:-22}" .vps.env "$VPS_USER@$VPS_HOST:${APP_DIR}/.env"
 
