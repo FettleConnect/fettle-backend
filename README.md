@@ -34,6 +34,13 @@ inside Docker:
 docker compose --profile test run --rm api-test
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for route conventions, compatibility
+rules, and validation guidance. PWA transcript compatibility work should also
+use [docs/pwa_transcript_api_surface.md](docs/pwa_transcript_api_surface.md) as
+the route and response checklist.
+
 ## Services
 
 - API: `http://localhost:8000`

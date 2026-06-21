@@ -2,42 +2,41 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import uuid
 from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
 import pytest
 import pytest_asyncio
-
-# Windows: psycopg async requires SelectorEventLoop, not the default ProactorEventLoop
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+
 # ── Set required env vars BEFORE any app imports ──────────────────────────────
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")
+def _set_test_default(name: str, value: str) -> None:
+    if not os.environ.get(name):
+        os.environ[name] = value
+
+
+_set_test_default("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")
 os.environ["DEBUG"] = "false"
 os.environ["DATABASE_URL"] = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
 )
-os.environ.setdefault("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
-os.environ.setdefault("INTERNAL_API_BASE_URL", "http://test")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
-os.environ.setdefault("LIVEKIT_URL_INTERNAL", "http://localhost:7880")
-os.environ.setdefault("LIVEKIT_URL", "")
-os.environ.setdefault("LIVEKIT_API_KEY", "")
-os.environ.setdefault("LIVEKIT_API_SECRET", "")
-os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
-os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
-
-from unittest.mock import MagicMock, patch
+_set_test_default("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
+_set_test_default("INTERNAL_API_BASE_URL", "http://test")
+_set_test_default("REDIS_URL", "redis://localhost:6379/0")
+_set_test_default("CELERY_BROKER_URL", "redis://localhost:6379/0")
+_set_test_default("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+_set_test_default("LIVEKIT_URL_INTERNAL", "http://localhost:7880")
+_set_test_default("LIVEKIT_URL", "")
+_set_test_default("LIVEKIT_API_KEY", "")
+_set_test_default("LIVEKIT_API_SECRET", "")
+_set_test_default("OPENAI_API_KEY", "test-openai-key")
+_set_test_default("OPENROUTER_API_KEY", "test-openrouter-key")
 
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
