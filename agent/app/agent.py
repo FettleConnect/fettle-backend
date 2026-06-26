@@ -99,7 +99,9 @@ async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
         )
         return []
     try:
-        logger.info("Doctor schedule fetch started: organization_id=%s", organization_id)
+        logger.info(
+            "Doctor schedule fetch started: organization_id=%s", organization_id
+        )
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{_internal_api_base()}/api/v1/tenant/doctors",
@@ -654,7 +656,9 @@ def ghost_protection(ctx: JobContext) -> None:
             if p.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT
         ]
         if not non_agents:
-            logger.info("Ghost protection shutting down empty room: room=%s", ctx.room.name)
+            logger.info(
+                "Ghost protection shutting down empty room: room=%s", ctx.room.name
+            )
             ctx.shutdown()
 
 
