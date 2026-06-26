@@ -45,6 +45,9 @@ def dispatch(payload: dict = Body(...)):
         json.dump(obj, fh)
 
     logging.info("Dispatched call %s -> %s", phone, id_key)
+    logging.warning(
+        "/dispatch is a local-debug placeholder and does not create a real LiveKit dispatch"
+    )
 
     # Placeholder: integration with LiveKit server / SIP dispatcher should happen here.
     return {"error": 0, "vapi_id": id_key}

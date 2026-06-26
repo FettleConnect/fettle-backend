@@ -59,15 +59,28 @@ def _openrouter_api_key() -> str:
 
 
 def _openrouter_model() -> str:
-    return os.environ.get("OPENROUTER_MODEL", "openai/gpt-4o")
+    return os.environ.get("OPENROUTER_MODEL", "openai/gpt-5.4-mini")
+
+
+def _mask_phone(phone_number: str | None) -> str:
+    digits = "".join(ch for ch in (phone_number or "") if ch.isdigit())
+    if len(digits) <= 4:
+        return digits or "unknown"
+    return f"{digits[:2]}...{digits[-2:]}"
 
 
 async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
     """Fetch doctor schedule from FastAPI for the given organization."""
     secret = _internal_secret()
     if not secret or not organization_id:
+        logger.warning(
+            "Doctor schedule fetch skipped: secret_configured=%s organization_id_present=%s",
+            bool(secret),
+            bool(organization_id),
+        )
         return []
     try:
+        logger.info("Doctor schedule fetch started: organization_id=%s", organization_id)
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{_internal_api_base()}/api/v1/tenant/doctors",
@@ -75,9 +88,19 @@ async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
                 headers={"X-Internal-API-Secret": secret},
             )
             resp.raise_for_status()
-            return resp.json()
+            payload = resp.json()
+            logger.info(
+                "Doctor schedule fetch succeeded: organization_id=%s count=%s",
+                organization_id,
+                len(payload),
+            )
+            return payload
     except Exception as exc:
-        logger.warning("Doctor schedule fetch failed: %s", exc)
+        logger.warning(
+            "Doctor schedule fetch failed: organization_id=%s error=%s",
+            organization_id,
+            exc,
+        )
         return []
 
 
@@ -85,8 +108,14 @@ async def _fetch_patient_info(phone_number: str) -> dict | None:
     """Look up patient by phone number via the internal patient lookup API."""
     secret = _internal_secret()
     if not secret or not phone_number:
+        logger.warning(
+            "Patient lookup skipped: secret_configured=%s phone_present=%s",
+            bool(secret),
+            bool(phone_number),
+        )
         return None
     try:
+        logger.info("Patient lookup started: phone=%s", _mask_phone(phone_number))
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.get(
                 f"{_internal_api_base()}/api/patient_lookup_by_phone/",
@@ -94,9 +123,20 @@ async def _fetch_patient_info(phone_number: str) -> dict | None:
                 headers={"X-Internal-API-Secret": secret},
             )
             resp.raise_for_status()
-            return resp.json()
+            payload = resp.json()
+            logger.info(
+                "Patient lookup succeeded: phone=%s error=%s records=%s",
+                _mask_phone(phone_number),
+                payload.get("error"),
+                len(payload.get("data") or []),
+            )
+            return payload
     except Exception as exc:
-        logger.warning("Patient lookup failed: %s", exc)
+        logger.warning(
+            "Patient lookup failed: phone=%s error=%s",
+            _mask_phone(phone_number),
+            exc,
+        )
         return None
 
 
@@ -113,8 +153,16 @@ async def _raise_escalation(
     """
     secret = _internal_secret()
     if not secret:
+        logger.warning("Escalation skipped: internal secret not configured")
         return "Escalation failed: internal secret not configured"
     try:
+        logger.info(
+            "Escalation request started: organization_id=%s department=%s patient_id_present=%s phone=%s",
+            organization_id,
+            department,
+            bool(patient_id),
+            _mask_phone(phone_number),
+        )
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
                 f"{_internal_api_base()}/api/internal/escalation/",
@@ -130,9 +178,26 @@ async def _raise_escalation(
                 },
             )
             if resp.status_code == 200 and resp.json().get("error") == 0:
+                logger.info(
+                    "Escalation recorded: organization_id=%s department=%s phone=%s",
+                    organization_id,
+                    department,
+                    _mask_phone(phone_number),
+                )
                 return "Escalation recorded"
+            logger.warning(
+                "Escalation request failed: organization_id=%s status=%s body=%s",
+                organization_id,
+                resp.status_code,
+                resp.text[:500],
+            )
             return f"Escalation failed: {resp.status_code}"
     except Exception as exc:
+        logger.exception(
+            "Escalation request crashed: organization_id=%s phone=%s",
+            organization_id,
+            _mask_phone(phone_number),
+        )
         return f"Escalation failed: {exc}"
 
 
@@ -185,13 +250,29 @@ async def _send_whatsapp(
         payload["channel_id"] = channel_id
 
     try:
+        logger.info(
+            "WhatsApp send started: phone=%s mode=%s template=%s channel_id_present=%s",
+            _mask_phone(to_number),
+            "template" if template_name else "text",
+            template_name or "",
+            bool(channel_id),
+        )
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
+            response = await client.post(
                 f"{vobiz_url}/api/v1/messaging/messages", json=payload, headers=headers
+            )
+            logger.info(
+                "WhatsApp send completed: phone=%s status=%s",
+                _mask_phone(to_number),
+                response.status_code,
             )
             return True
     except Exception as exc:
-        logger.warning("WhatsApp send failed: %s", exc)
+        logger.warning(
+            "WhatsApp send failed: phone=%s error=%s",
+            _mask_phone(to_number),
+            exc,
+        )
         return False
 
 
@@ -264,11 +345,33 @@ class InboundAssistant(_FillerMixin, Agent):
         super().__init__(
             instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]]
         )
+        logger.info(
+            "InboundAssistant initialized: organization_id=%s caller=%s tools=%s",
+            organization_id,
+            _mask_phone(caller_number),
+            [
+                "end_call",
+                "get_doctor_schedule",
+                "send_appointment_confirmation",
+                "get_patient_info_by_phone",
+                "raise_escalation",
+            ],
+        )
 
     async def on_enter(self) -> None:
+        logger.info(
+            "InboundAssistant entering room: organization_id=%s caller=%s",
+            self.organization_id,
+            _mask_phone(self.caller_number),
+        )
         await self._cache_fillers(getattr(self, "tts", None))
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
+        logger.info(
+            "InboundAssistant user turn completed: organization_id=%s message_present=%s",
+            self.organization_id,
+            bool(new_message),
+        )
         await self._play_filler()
 
     @function_tool(
@@ -278,6 +381,12 @@ class InboundAssistant(_FillerMixin, Agent):
     async def get_doctor_schedule(
         self, context: RunContext, doctor_name: str = "", department: str = ""
     ) -> str:
+        logger.info(
+            "Tool call started: get_doctor_schedule organization_id=%s doctor_name=%s department=%s",
+            self.organization_id,
+            doctor_name,
+            department,
+        )
         doctors = await _fetch_doctor_schedule(self.organization_id)
         dn = doctor_name.lower().strip()
         dp = department.lower().strip()
@@ -288,7 +397,14 @@ class InboundAssistant(_FillerMixin, Agent):
             or (dp and dp in d.get("department", "").lower())
         ]
         unique = list(dict.fromkeys(matches[:5]))
-        return ", ".join(unique) if unique else "No matching doctor found."
+        result = ", ".join(unique) if unique else "No matching doctor found."
+        logger.info(
+            "Tool call completed: get_doctor_schedule organization_id=%s matches=%s result=%s",
+            self.organization_id,
+            len(unique),
+            result,
+        )
+        return result
 
     @function_tool(
         flags=ToolFlag.IGNORE_ON_ENTER,
@@ -303,6 +419,15 @@ class InboundAssistant(_FillerMixin, Agent):
         appointment_date: str,
         appointment_time: str,
     ) -> str:
+        logger.info(
+            "Tool call started: send_appointment_confirmation caller=%s patient_name=%s doctor_name=%s department=%s appointment_date=%s appointment_time=%s",
+            _mask_phone(self.caller_number),
+            patient_name,
+            doctor_name,
+            department,
+            appointment_date,
+            appointment_time,
+        )
         # Derive hospital name from instructions (already embedded)
         hospital_name = (
             self.instructions.split(".")[0]
@@ -329,6 +454,11 @@ class InboundAssistant(_FillerMixin, Agent):
                 to_number=admin_phone,
                 msg=f"New Appt: {patient_name} with {doctor_name} on {appointment_date} at {appointment_time}",
             )
+        logger.info(
+            "Tool call completed: send_appointment_confirmation caller=%s hospital_name=%s",
+            _mask_phone(self.caller_number),
+            hospital_name,
+        )
         return "Sent"
 
     @function_tool(
@@ -339,12 +469,28 @@ class InboundAssistant(_FillerMixin, Agent):
         self, context: RunContext, phone_number: str = ""
     ) -> str:
         lookup = phone_number.strip() or (self.caller_number or "").strip()
+        logger.info(
+            "Tool call started: get_patient_info_by_phone requested_phone=%s resolved_phone=%s",
+            _mask_phone(phone_number),
+            _mask_phone(lookup),
+        )
         if not lookup:
+            logger.info("Tool call completed: get_patient_info_by_phone missing phone")
             return "What is your name?"
         payload = await _fetch_patient_info(lookup)
         if not payload or payload.get("error") != 0:
+            logger.info(
+                "Tool call completed: get_patient_info_by_phone no match resolved_phone=%s",
+                _mask_phone(lookup),
+            )
             return "What is your name?"
-        return json.dumps(payload, indent=2, default=str)
+        result = json.dumps(payload, indent=2, default=str)
+        logger.info(
+            "Tool call completed: get_patient_info_by_phone resolved_phone=%s payload_bytes=%s",
+            _mask_phone(lookup),
+            len(result),
+        )
+        return result
 
     @function_tool(
         flags=ToolFlag.IGNORE_ON_ENTER,
@@ -359,13 +505,26 @@ class InboundAssistant(_FillerMixin, Agent):
         phone_number: str = "",
     ) -> str:
         phone = (phone_number or self.caller_number or "").strip()
-        return await _raise_escalation(
+        logger.info(
+            "Tool call started: raise_escalation organization_id=%s department=%s patient_id_present=%s phone=%s",
+            self.organization_id,
+            department,
+            bool(patient_id),
+            _mask_phone(phone),
+        )
+        result = await _raise_escalation(
             organization_id=self.organization_id,
             issue_description=issue_description,
             department=department,
             patient_id=patient_id,
             phone_number=phone,
         )
+        logger.info(
+            "Tool call completed: raise_escalation organization_id=%s result=%s",
+            self.organization_id,
+            result,
+        )
+        return result
 
 
 class OutboundAssistant(_FillerMixin, Agent):
@@ -381,11 +540,27 @@ class OutboundAssistant(_FillerMixin, Agent):
         super().__init__(
             instructions=instructions, tools=[EndCallTool(delete_room=True).tools[0]]
         )
+        logger.info(
+            "OutboundAssistant initialized: organization_id=%s caller=%s tools=%s",
+            organization_id,
+            _mask_phone(caller_number),
+            ["end_call", "log_call_outcome"],
+        )
 
     async def on_enter(self) -> None:
+        logger.info(
+            "OutboundAssistant entering room: organization_id=%s caller=%s",
+            self.organization_id,
+            _mask_phone(self.caller_number),
+        )
         await self._cache_fillers(getattr(self, "tts", None))
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
+        logger.info(
+            "OutboundAssistant user turn completed: organization_id=%s message_present=%s",
+            self.organization_id,
+            bool(new_message),
+        )
         await self._play_filler()
 
     @function_tool(
@@ -395,12 +570,23 @@ class OutboundAssistant(_FillerMixin, Agent):
     async def log_call_outcome(
         self, context: RunContext, feedback_summary: str, sentiment: str
     ) -> str:
+        logger.info(
+            "Tool call started: log_call_outcome organization_id=%s sentiment=%s summary_bytes=%s",
+            self.organization_id,
+            sentiment,
+            len(feedback_summary),
+        )
         admin_phone = os.environ.get("ADMIN_PHONE", "")
         if admin_phone:
             await _send_whatsapp(
                 to_number=admin_phone,
                 msg=f"Outbound Feedback:\nSummary: {feedback_summary}\nSentiment: {sentiment}",
             )
+        logger.info(
+            "Tool call completed: log_call_outcome organization_id=%s admin_phone_present=%s",
+            self.organization_id,
+            bool(admin_phone),
+        )
         return "Logged"
 
 
@@ -410,13 +596,21 @@ server = AgentServer(host="0.0.0.0", job_executor_type=JobExecutorType.THREAD)
 
 
 def prewarm(proc: JobProcess) -> None:
+    model = _openrouter_model()
+    logger.info(
+        "Prewarm starting: openrouter_base_url=%s model=%s soniox_languages=%s cartesia_voice_present=%s",
+        OPENROUTER_BASE_URL,
+        model,
+        ["en", "hi", "te"],
+        bool(os.environ.get("CARTESIA_VOICE_ID")),
+    )
     proc.userdata["vad"] = silero.VAD.load()
     proc.userdata["stt"] = soniox.STT(
         api_key=os.environ.get("SONIOX_API_KEY", ""),
         params=soniox.STTOptions(language_hints=["en", "hi", "te"]),
     )
     proc.userdata["llm"] = openai.LLM(
-        model=_openrouter_model(),
+        model=model,
         base_url=OPENROUTER_BASE_URL,
         api_key=_openrouter_api_key(),
     )
@@ -426,6 +620,7 @@ def prewarm(proc: JobProcess) -> None:
             "CARTESIA_VOICE_ID", "927c55a9-74a9-4272-871e-a559c8989abe"
         ),
     )
+    logger.info("Prewarm completed: llm_stt_tts_vad_ready=true")
 
 
 server.setup_fnc = prewarm
@@ -434,16 +629,24 @@ server.setup_fnc = prewarm
 def ghost_protection(ctx: JobContext) -> None:
     @ctx.room.on("participant_disconnected")
     def _on_disconnect(participant: rtc.RemoteParticipant) -> None:
+        logger.info(
+            "Participant disconnected: identity=%s kind=%s room=%s",
+            participant.identity,
+            participant.kind,
+            ctx.room.name,
+        )
         non_agents = [
             p
             for p in ctx.room.remote_participants.values()
             if p.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT
         ]
         if not non_agents:
+            logger.info("Ghost protection shutting down empty room: room=%s", ctx.room.name)
             ctx.shutdown()
 
 
 async def create_session(ctx: JobContext) -> AgentSession:
+    logger.info("Creating agent session: room=%s job_id=%s", ctx.room.name, ctx.job.id)
     return AgentSession(
         stt=ctx.proc.userdata["stt"],
         llm=ctx.proc.userdata["llm"],
@@ -487,12 +690,16 @@ async def entrypoint(ctx: JobContext) -> None:
             f"You are an outbound AI assistant calling from {hospital_name}. "
             f"Purpose: {meta.get('prompt', 'health campaign follow-up')}. "
             "Be concise, respectful, and speak only English, Hindi, or Telugu. "
+            "Use log_call_outcome after the patient finishes responding and you have a concise summary plus sentiment. "
         )
     else:
         base_inst = (
             f"You are a front-desk assistant for {hospital_name}. "
             "Support English, Hindi, Telugu. Ask one question at a time. "
-            "Use get_doctor_schedule for doctor queries. "
+            "Use get_doctor_schedule for doctor queries instead of guessing. "
+            "Use get_patient_info_by_phone when caller identity or appointment history is needed. "
+            "Use send_appointment_confirmation only after the appointment is fully confirmed. "
+            "Use raise_escalation for urgent, unsafe, or angry-caller situations. "
             "If the caller is new, collect name, spelling, and location in separate turns. "
         )
 
@@ -510,6 +717,11 @@ async def entrypoint(ctx: JobContext) -> None:
         async with httpx.AsyncClient(timeout=5) as client:
             secret = _internal_secret()
             if secret and organization_id:
+                logger.info(
+                    "Branding fetch started: organization_id=%s secret_configured=%s",
+                    organization_id,
+                    bool(secret),
+                )
                 r = await client.get(
                     f"{_internal_api_base()}/api/v1/tenant/branding",
                     headers={
@@ -519,12 +731,31 @@ async def entrypoint(ctx: JobContext) -> None:
                 )
                 if r.status_code == 200:
                     whatsapp_channel_id = r.json().get("whatsapp_channel_id")
+                    logger.info(
+                        "Branding fetch succeeded: organization_id=%s whatsapp_channel_present=%s",
+                        organization_id,
+                        bool(whatsapp_channel_id),
+                    )
+                else:
+                    logger.warning(
+                        "Branding fetch failed: organization_id=%s status=%s",
+                        organization_id,
+                        r.status_code,
+                    )
     except Exception:
-        pass
+        logger.exception("Branding fetch crashed: organization_id=%s", organization_id)
 
+    logger.info("Connecting job context: room=%s", ctx.room.name)
     await ctx.connect()
     participant = await ctx.wait_for_participant()
     caller_number: str = participant.attributes.get("sip.phoneNumber", "")
+    logger.info(
+        "Participant connected: identity=%s kind=%s caller=%s room=%s",
+        participant.identity,
+        participant.kind,
+        _mask_phone(caller_number),
+        ctx.room.name,
+    )
 
     session = await create_session(ctx)
 
@@ -553,6 +784,12 @@ async def entrypoint(ctx: JobContext) -> None:
             greeting = _build_inbound_greeting(hospital_name, patient_payload)
 
     await session.start(agent=assistant, room=ctx.room)
+    logger.info(
+        "Session started: room=%s agent_type=%s caller=%s",
+        ctx.room.name,
+        assistant.__class__.__name__,
+        _mask_phone(caller_number),
+    )
     await asyncio.sleep(1.5)
     logger.info("Greeting: %s", greeting)
     await session.say(greeting, allow_interruptions=False)
