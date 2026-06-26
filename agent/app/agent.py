@@ -41,6 +41,17 @@ OUTBOUND_GREETING_TEMPLATE = (
 )
 NAME_FALLBACK_TEMPLATE = "Hello, this is the {hospital_name} front desk. Could you tell me your name, please?"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+INBOUND_TOOL_MANIFEST = [
+    "get_doctor_schedule(doctor_name, department): use for doctor queries instead of guessing",
+    "get_patient_info_by_phone(phone_number): use when caller identity or appointment history is needed",
+    "send_appointment_confirmation(patient_name, doctor_name, department, appointment_date, appointment_time): use only after appointment is fully confirmed",
+    "raise_escalation(issue_description, department, patient_id, phone_number): use for urgent, unsafe, or angry-caller situations",
+    "end_call(): use when the conversation is complete",
+]
+OUTBOUND_TOOL_MANIFEST = [
+    "log_call_outcome(feedback_summary, sentiment): use after the patient finishes responding and you can summarize the outcome",
+    "end_call(): use when the conversation is complete",
+]
 
 
 # ── Internal API helpers ───────────────────────────────────────────────────────
@@ -67,6 +78,10 @@ def _mask_phone(phone_number: str | None) -> str:
     if len(digits) <= 4:
         return digits or "unknown"
     return f"{digits[:2]}...{digits[-2:]}"
+
+
+def _tool_manifest_text(tool_manifest: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in tool_manifest)
 
 
 async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
@@ -349,13 +364,7 @@ class InboundAssistant(_FillerMixin, Agent):
             "InboundAssistant initialized: organization_id=%s caller=%s tools=%s",
             organization_id,
             _mask_phone(caller_number),
-            [
-                "end_call",
-                "get_doctor_schedule",
-                "send_appointment_confirmation",
-                "get_patient_info_by_phone",
-                "raise_escalation",
-            ],
+            INBOUND_TOOL_MANIFEST,
         )
 
     async def on_enter(self) -> None:
@@ -544,7 +553,7 @@ class OutboundAssistant(_FillerMixin, Agent):
             "OutboundAssistant initialized: organization_id=%s caller=%s tools=%s",
             organization_id,
             _mask_phone(caller_number),
-            ["end_call", "log_call_outcome"],
+            OUTBOUND_TOOL_MANIFEST,
         )
 
     async def on_enter(self) -> None:
@@ -677,12 +686,14 @@ async def entrypoint(ctx: JobContext) -> None:
     is_outbound = meta.get("type") == "outbound"
 
     logger.info(
-        "JOB: id=%s org=%s hospital=%s type=%s room=%s",
+        "JOB: id=%s org=%s hospital=%s type=%s room=%s meta_keys=%s prompt_prefix_present=%s",
         ctx.job.id,
         organization_id,
         hospital_name,
         "outbound" if is_outbound else "inbound",
         ctx.room.name,
+        sorted(meta.keys()),
+        bool(agent_prompt_prefix),
     )
 
     if is_outbound:
@@ -690,16 +701,17 @@ async def entrypoint(ctx: JobContext) -> None:
             f"You are an outbound AI assistant calling from {hospital_name}. "
             f"Purpose: {meta.get('prompt', 'health campaign follow-up')}. "
             "Be concise, respectful, and speak only English, Hindi, or Telugu. "
-            "Use log_call_outcome after the patient finishes responding and you have a concise summary plus sentiment. "
+            "Use tools when they match the caller's need. "
+            "Available tools:\n"
+            f"{_tool_manifest_text(OUTBOUND_TOOL_MANIFEST)}\n"
         )
     else:
         base_inst = (
             f"You are a front-desk assistant for {hospital_name}. "
             "Support English, Hindi, Telugu. Ask one question at a time. "
-            "Use get_doctor_schedule for doctor queries instead of guessing. "
-            "Use get_patient_info_by_phone when caller identity or appointment history is needed. "
-            "Use send_appointment_confirmation only after the appointment is fully confirmed. "
-            "Use raise_escalation for urgent, unsafe, or angry-caller situations. "
+            "Use tools when they match the caller's need. "
+            "Available tools:\n"
+            f"{_tool_manifest_text(INBOUND_TOOL_MANIFEST)}\n"
             "If the caller is new, collect name, spelling, and location in separate turns. "
         )
 
@@ -710,6 +722,12 @@ async def entrypoint(ctx: JobContext) -> None:
         )
     else:
         instructions = base_inst
+    logger.info(
+        "Resolved instructions prepared: room=%s agent_type=%s instructions_bytes=%s",
+        ctx.room.name,
+        "outbound" if is_outbound else "inbound",
+        len(instructions),
+    )
 
     # Fetch hospital WhatsApp config
     whatsapp_channel_id: str | None = None
