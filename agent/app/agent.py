@@ -84,6 +84,10 @@ def _tool_manifest_text(tool_manifest: list[str]) -> str:
     return "\n".join(f"- {item}" for item in tool_manifest)
 
 
+def _is_inbound_room(room_name: str) -> bool:
+    return room_name.startswith("inbound_")
+
+
 async def _fetch_doctor_schedule(organization_id: str) -> list[dict]:
     """Fetch doctor schedule from FastAPI for the given organization."""
     secret = _internal_secret()
@@ -679,19 +683,44 @@ async def entrypoint(ctx: JobContext) -> None:
     room_meta = json.loads(ctx.room.metadata) if ctx.room.metadata else {}
     job_meta = json.loads(ctx.job.metadata) if ctx.job.metadata else {}
     meta = {**room_meta, **job_meta}
+    room_name = ctx.room.name
 
     organization_id: str = meta.get("organization_id", "")
     hospital_name: str = meta.get("hospital_name", "the hospital")
     agent_prompt_prefix: str = meta.get("agent_prompt_prefix", "")
-    is_outbound = meta.get("type") == "outbound"
+    room_type = room_meta.get("type")
+    job_type = job_meta.get("type")
+    inferred_type = "inbound" if _is_inbound_room(room_name) else "outbound"
+    resolved_type = inferred_type
+    if job_type and job_type != inferred_type:
+        logger.warning(
+            "Call direction mismatch: room=%s inferred_type=%s job_type=%s room_type=%s using=%s",
+            room_name,
+            inferred_type,
+            job_type,
+            room_type,
+            resolved_type,
+        )
+    elif room_type and room_type != inferred_type:
+        logger.warning(
+            "Call direction mismatch: room=%s inferred_type=%s room_type=%s job_type=%s using=%s",
+            room_name,
+            inferred_type,
+            room_type,
+            job_type,
+            resolved_type,
+        )
+    is_outbound = resolved_type == "outbound"
 
     logger.info(
-        "JOB: id=%s org=%s hospital=%s type=%s room=%s meta_keys=%s prompt_prefix_present=%s",
+        "JOB: id=%s org=%s hospital=%s type=%s room=%s room_type=%s job_type=%s meta_keys=%s prompt_prefix_present=%s",
         ctx.job.id,
         organization_id,
         hospital_name,
-        "outbound" if is_outbound else "inbound",
-        ctx.room.name,
+        resolved_type,
+        room_name,
+        room_type,
+        job_type,
         sorted(meta.keys()),
         bool(agent_prompt_prefix),
     )
@@ -724,7 +753,7 @@ async def entrypoint(ctx: JobContext) -> None:
         instructions = base_inst
     logger.info(
         "Resolved instructions prepared: room=%s agent_type=%s instructions_bytes=%s",
-        ctx.room.name,
+        room_name,
         "outbound" if is_outbound else "inbound",
         len(instructions),
     )
@@ -763,7 +792,7 @@ async def entrypoint(ctx: JobContext) -> None:
     except Exception:
         logger.exception("Branding fetch crashed: organization_id=%s", organization_id)
 
-    logger.info("Connecting job context: room=%s", ctx.room.name)
+    logger.info("Connecting job context: room=%s", room_name)
     await ctx.connect()
     participant = await ctx.wait_for_participant()
     caller_number: str = participant.attributes.get("sip.phoneNumber", "")
@@ -772,7 +801,7 @@ async def entrypoint(ctx: JobContext) -> None:
         participant.identity,
         participant.kind,
         _mask_phone(caller_number),
-        ctx.room.name,
+        room_name,
     )
 
     session = await create_session(ctx)
@@ -804,7 +833,7 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.start(agent=assistant, room=ctx.room)
     logger.info(
         "Session started: room=%s agent_type=%s caller=%s",
-        ctx.room.name,
+        room_name,
         assistant.__class__.__name__,
         _mask_phone(caller_number),
     )
