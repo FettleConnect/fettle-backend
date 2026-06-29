@@ -11,11 +11,9 @@ from api.app.core.config import get_settings
 from api.app.main import app
 from api.app.transcribe.db import SessionFactory
 from api.app.transcribe.observability import ObservabilityService
-from api.app.transcribe.storage import LocalStorage
-from api.app.transcribe.repositories.sqlalchemy import (
-    SqlSessionRepository,
-)
+from api.app.transcribe.repositories.sqlalchemy import SqlSessionRepository
 from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
+from api.app.transcribe.storage import LocalStorage
 
 
 def _auth_headers(client):

@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.config import get_settings
 from api.app.transcribe.db import SessionFactory
-from api.app.transcribe.storage import LocalStorage
 from api.app.transcribe.repositories.sqlalchemy import (
     SqlSessionRepository,
     SqlSyncRepository,
@@ -32,6 +31,7 @@ from api.app.transcribe.services.pdf import (
 from api.app.transcribe.services.transcription_provider import (
     LocalTranscriptionProvider,
 )
+from api.app.transcribe.storage import LocalStorage
 
 ALLOWED_REPORT_CONTEXT_MIME_TYPES = {
     "application/pdf",

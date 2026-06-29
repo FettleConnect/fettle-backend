@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.app.core.config import settings
 from api.app.db.base import engine
 from api.app.routers.legacy_hospital import router as legacy_hospital_router
+from api.app.transcribe.api.router import router as pwa_transcribe_router
 from api.app.views.v1.auth import router as auth_router
 from api.app.views.v1.chatbot import router as chatbot_router
 from api.app.views.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router
@@ -26,9 +27,6 @@ from api.app.views.v1.hospital.outbound_dashboard import router as outbound_dash
 from api.app.views.v1.hospital.patients import router as patients_router
 from api.app.views.v1.hospital.webhooks import router as webhooks_router
 from api.app.views.v1.tenant import router as tenant_router
-from api.app.transcribe.api.router import (
-    router as pwa_transcribe_router,
-)
 
 
 @asynccontextmanager

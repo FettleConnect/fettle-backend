@@ -15,8 +15,6 @@ from fastapi import (
     WebSocketDisconnect,
 )
 
-from api.app.transcribe.observability import ObservabilityService
-from api.app.transcribe.storage import LocalStorage
 from api.app.transcribe.api.dependencies import (
     get_auth_service,
     get_fettle_sync_service,
@@ -27,6 +25,7 @@ from api.app.transcribe.api.dependencies import (
     require_doctor,
     require_internal_admin,
 )
+from api.app.transcribe.observability import ObservabilityService
 from api.app.transcribe.schemas.auth import (
     AuthMeResponse,
     ListDoctorsResponse,
@@ -42,12 +41,14 @@ from api.app.transcribe.schemas.queue import (
     GetDoctorIntakeLinkResponse,
     GetPatientProfileByPhoneResponse,
     GetPublicIntakeLinkResponse,
-    SubmitPublicIntakeRequest,
-    SubmitPublicIntakeResponse,
-    UpdateQueueEntryResponse,
 )
 from api.app.transcribe.schemas.queue import (
     ListQueueEntriesResponse as QueueListResponse,
+)
+from api.app.transcribe.schemas.queue import (
+    SubmitPublicIntakeRequest,
+    SubmitPublicIntakeResponse,
+    UpdateQueueEntryResponse,
 )
 from api.app.transcribe.schemas.sessions import (
     CreateReportContextExtractionJobResponse,
@@ -77,6 +78,7 @@ from api.app.transcribe.services.sessions import SessionService
 from api.app.transcribe.services.transcription_provider import (
     LocalTranscriptionProvider,
 )
+from api.app.transcribe.storage import LocalStorage
 
 router = APIRouter(tags=["transcribe"])
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"

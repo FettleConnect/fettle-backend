@@ -12,11 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.security import hash_password
 from api.app.models.auth import User
+from api.app.models.hospital.transcribe import Job, KpiEvent, StoredFile
 from api.app.models.organization import Organization
-from api.app.models.hospital.transcribe import Job
-from api.app.models.hospital.transcribe import KpiEvent
-from api.app.models.hospital.transcribe import StoredFile
-from api.app.transcribe.id_codec import decode_public_id, encode_public_id
 from api.app.transcribe.domain.models import (
     TranscribeArtifact,
     TranscribeDraftDocument,
@@ -31,6 +28,7 @@ from api.app.transcribe.domain.models import (
     TranscribeSyncJob,
     TranscribeTranscription,
 )
+from api.app.transcribe.id_codec import decode_public_id, encode_public_id
 from api.app.transcribe.preloaded_doctors import PRELOADED_DOCTORS
 from api.app.transcribe.schemas.common import (
     ConsultationSession,
