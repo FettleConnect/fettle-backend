@@ -1,8 +1,8 @@
 services:
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     command: >
       sh -c "python -m alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
@@ -62,8 +62,8 @@ services:
 
   celery:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     # app.worker is the module containing tasks.py (NOT app.tasks)
     command: celery -A app.celery_app.celery_app worker -l info --concurrency=2
     env_file:

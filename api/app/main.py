@@ -26,6 +26,7 @@ from api.app.views.v1.hospital.outbound_dashboard import router as outbound_dash
 from api.app.views.v1.hospital.patients import router as patients_router
 from api.app.views.v1.hospital.webhooks import router as webhooks_router
 from api.app.views.v1.tenant import router as tenant_router
+from fettle_backend.products.transcribe.api.router import router as pwa_transcribe_router
 
 
 @asynccontextmanager
@@ -57,6 +58,7 @@ app.add_middleware(
 _V1 = "/api/v1"
 
 app.include_router(health_router)
+app.include_router(pwa_transcribe_router)
 # Legacy-compatible routes — mounted at root to match what the frontend calls
 app.include_router(google_auth_router)
 app.include_router(legacy_compat_router)

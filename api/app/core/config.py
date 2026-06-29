@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ Internal API
     internal_api_shared_secret: str = ""
     internal_api_base_url: str = "http://api:8000"
+    internal_api_enabled: bool = False
+    internal_api_key: str = "change-me"
+    legacy_auth_secret: str = "change-me"
+
+    # ------------------------------------------------------------------ Local artifacts / PWA compatibility
+    artifact_storage_root: str = "./var/artifacts"
+    pdf_delivery_public_base_url: str = "http://localhost:8000"
+    pdf_delivery_token_secret: str | None = None
+    pdf_delivery_token_ttl_seconds: int = 900
+    fettle_sync_enabled: bool = False
+    fettle_backend_url: str | None = None
+    fettle_sync_secret: str | None = None
+    fettle_sync_timeout_seconds: float = 8
+    fettle_sync_max_attempts: int = 10
+    fettle_sync_retry_delay_seconds: float = 15
 
     # ------------------------------------------------------------------ PayPal
     paypal_client_id: str = ""

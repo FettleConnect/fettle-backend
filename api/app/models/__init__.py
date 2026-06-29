@@ -41,6 +41,24 @@ from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscr
 from api.app.models.hospital.patient import HospitalUploadLog, Patient
 from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
 from api.app.models.shared import GlobalConfig
+from fettle_backend.platform.jobs.models import Job, JobAttempt
+from fettle_backend.platform.observability.models import KpiEvent
+from fettle_backend.platform.storage.models import StoredFile
+from fettle_backend.products.transcribe.domain.models import (
+    TranscribeArtifact,
+    TranscribeDoctor,
+    TranscribeDraftDocument,
+    TranscribeIntakeLink,
+    TranscribePdfDeliveryJob,
+    TranscribePdfDeliverySettings,
+    TranscribeQueueEntry,
+    TranscribeReportContextDocument,
+    TranscribeReportContextItem,
+    TranscribeSession,
+    TranscribeSessionAudio,
+    TranscribeSyncJob,
+    TranscribeTranscription,
+)
 
 __all__ = [
     "Organization",
@@ -81,4 +99,21 @@ __all__ = [
     "Notification",
     "SupportTicket",
     "GlobalConfig",
+    "Job",
+    "JobAttempt",
+    "KpiEvent",
+    "StoredFile",
+    "TranscribeDoctor",
+    "TranscribeIntakeLink",
+    "TranscribeSession",
+    "TranscribeSessionAudio",
+    "TranscribeTranscription",
+    "TranscribeDraftDocument",
+    "TranscribeReportContextDocument",
+    "TranscribeReportContextItem",
+    "TranscribeArtifact",
+    "TranscribePdfDeliveryJob",
+    "TranscribePdfDeliverySettings",
+    "TranscribeQueueEntry",
+    "TranscribeSyncJob",
 ]

@@ -16,6 +16,8 @@ RUN python -m pip install --upgrade pip && \
 COPY api/alembic.ini ./
 COPY api/alembic ./alembic
 COPY api/app ./app
+COPY src ./src
+COPY fettle_backend ./fettle_backend
 COPY pytest.ini ./
 COPY tests ./tests
 COPY api/test-entrypoint.sh ./test-entrypoint.sh
