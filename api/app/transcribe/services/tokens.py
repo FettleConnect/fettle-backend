@@ -22,9 +22,13 @@ def issue_legacy_doctor_token(doctor_id: str, token_version: int, secret: str) -
         "tokenVersion": token_version,
         "issuedAt": datetime.now(UTC).isoformat(),
     }
-    payload_raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    payload_raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
     payload_part = _b64_encode(payload_raw)
-    signature = hmac.new(secret.encode("utf-8"), payload_part.encode("utf-8"), hashlib.sha256).digest()
+    signature = hmac.new(
+        secret.encode("utf-8"), payload_part.encode("utf-8"), hashlib.sha256
+    ).digest()
     return f"{payload_part}.{_b64_encode(signature)}"
 
 
@@ -51,7 +55,9 @@ def verify_legacy_doctor_token(token: str, secret: str) -> dict[str, object] | N
     except ValueError:
         return None
 
-    expected_signature = hmac.new(secret.encode("utf-8"), payload_part.encode("utf-8"), hashlib.sha256).digest()
+    expected_signature = hmac.new(
+        secret.encode("utf-8"), payload_part.encode("utf-8"), hashlib.sha256
+    ).digest()
     actual_signature = _b64_decode(signature_part)
     if not hmac.compare_digest(expected_signature, actual_signature):
         return None

@@ -3,7 +3,10 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.transcribe.models import import_model_modules
-from api.app.transcribe.repositories.sqlalchemy import SqlDoctorRepository, SqlSessionRepository
+from api.app.transcribe.repositories.sqlalchemy import (
+    SqlDoctorRepository,
+    SqlSessionRepository,
+)
 
 
 async def seed_transcribe_defaults(session: AsyncSession) -> None:

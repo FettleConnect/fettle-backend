@@ -21,7 +21,9 @@ class FettleSyncService:
     def enabled(self) -> bool:
         return self.settings.fettle_sync_enabled
 
-    async def enqueue_session_sync(self, session: ConsultationSession, trigger: str) -> dict | None:
+    async def enqueue_session_sync(
+        self, session: ConsultationSession, trigger: str
+    ) -> dict | None:
         if not self.enabled:
             return None
         now = datetime.now(UTC)
@@ -91,17 +93,25 @@ class FettleSyncService:
                 await self.repository.mark_failed(
                     job["id"],
                     status=status,
-                    next_attempt_at=datetime.now(UTC) + timedelta(seconds=self.settings.fettle_sync_retry_delay_seconds),
+                    next_attempt_at=datetime.now(UTC)
+                    + timedelta(seconds=self.settings.fettle_sync_retry_delay_seconds),
                     last_error=str(exc),
                     last_error_class=type(exc).__name__,
                     finished_at=datetime.now(UTC) if should_dead_letter else None,
                 )
-        return {"processed": len(jobs), "succeeded": succeeded, "failed": failed, "deadLetter": dead_letter}
+        return {
+            "processed": len(jobs),
+            "succeeded": succeeded,
+            "failed": failed,
+            "deadLetter": dead_letter,
+        }
 
     async def get_stats(self) -> dict:
         return await self.repository.get_stats(self.enabled)
 
-    async def list_jobs(self, *, status: str | None = None, limit: int = 50) -> list[dict]:
+    async def list_jobs(
+        self, *, status: str | None = None, limit: int = 50
+    ) -> list[dict]:
         return await self.repository.list_jobs(status=status, limit=limit)
 
     async def replay_dead_letter(self, job_id: str) -> dict | None:
@@ -110,8 +120,12 @@ class FettleSyncService:
 
     async def _send_job(self, job: dict) -> None:
         if not self.settings.fettle_backend_url or not self.settings.fettle_sync_secret:
-            raise RuntimeError("Fettle sync is enabled but backend URL or secret is missing.")
-        async with httpx.AsyncClient(timeout=self.settings.fettle_sync_timeout_seconds) as client:
+            raise RuntimeError(
+                "Fettle sync is enabled but backend URL or secret is missing."
+            )
+        async with httpx.AsyncClient(
+            timeout=self.settings.fettle_sync_timeout_seconds
+        ) as client:
             response = await client.post(
                 f"{self.settings.fettle_backend_url.rstrip('/')}/api/medivoice/sync/",
                 headers={
@@ -122,13 +136,17 @@ class FettleSyncService:
                 content=json.dumps(job["payload"]),
             )
         if response.status_code >= 400:
-            raise RuntimeError(f"Fettle sync failed with status {response.status_code}: {response.text[:500]}")
+            raise RuntimeError(
+                f"Fettle sync failed with status {response.status_code}: {response.text[:500]}"
+            )
 
     def _ensure_enabled(self) -> None:
         if not self.enabled:
             raise HTTPException(
                 status_code=409,
-                detail=ErrorResponse(message="Fettle sync is not configured.").model_dump(),
+                detail=ErrorResponse(
+                    message="Fettle sync is not configured."
+                ).model_dump(),
             )
 
 
@@ -143,9 +161,15 @@ def build_fettle_payload(session: ConsultationSession, trigger: str) -> dict:
         "patientName": session.patient.name,
         "patientMobile": session.patient.phoneNumber,
         "patientEmail": "",
-        "overallSummary": transcription.summary if transcription and transcription.summary else "",
+        "overallSummary": (
+            transcription.summary if transcription and transcription.summary else ""
+        ),
         "transcriptions": [
-            {"speaker": segment.speakerLabel, "text": segment.text, "timestamp": segment.startedAtSeconds}
+            {
+                "speaker": segment.speakerLabel,
+                "text": segment.text,
+                "timestamp": segment.startedAtSeconds,
+            }
             for segment in segments
             if segment.text.strip()
         ],
@@ -158,5 +182,7 @@ def build_fettle_payload(session: ConsultationSession, trigger: str) -> dict:
 
 
 def build_sync_key(session_id: str, trigger: str, payload: dict) -> str:
-    payload_digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+    payload_digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()
+    ).hexdigest()[:16]
     return f"{session_id}:{trigger}:{payload_digest}"

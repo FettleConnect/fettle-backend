@@ -104,10 +104,18 @@ class ObservabilityService:
             grouped[event.metric_key].append(event)
         metrics = []
         for metric_key, metric_events in sorted(grouped.items()):
-            failures = [event for event in metric_events if event.payload.get("status") == "failure"]
+            failures = [
+                event
+                for event in metric_events
+                if event.payload.get("status") == "failure"
+            ]
             total = len(metric_events)
             success = total - len(failures)
-            latencies = [float(event.payload.get("elapsedMs", 0)) for event in metric_events if event.payload.get("elapsedMs") is not None]
+            latencies = [
+                float(event.payload.get("elapsedMs", 0))
+                for event in metric_events
+                if event.payload.get("elapsedMs") is not None
+            ]
             latest = metric_events[-1]
             metrics.append(
                 {
@@ -122,9 +130,21 @@ class ObservabilityService:
                     "minimumSampleSize": 3,
                     "avgDurationMs": mean(latencies) if latencies else None,
                     "lastSeenAt": latest.created_at.isoformat(),
-                    **({"lastFailureAt": failures[-1].created_at.isoformat()} if failures else {}),
-                    **({"lastError": str(failures[-1].payload.get("error"))} if failures and failures[-1].payload.get("error") else {}),
-                    **({"lastProvider": str(latest.payload.get("provider"))} if latest.payload.get("provider") else {}),
+                    **(
+                        {"lastFailureAt": failures[-1].created_at.isoformat()}
+                        if failures
+                        else {}
+                    ),
+                    **(
+                        {"lastError": str(failures[-1].payload.get("error"))}
+                        if failures and failures[-1].payload.get("error")
+                        else {}
+                    ),
+                    **(
+                        {"lastProvider": str(latest.payload.get("provider"))}
+                        if latest.payload.get("provider")
+                        else {}
+                    ),
                 }
             )
         return {
@@ -144,7 +164,9 @@ class ObservabilityService:
         metric_contains: str | None = None,
     ) -> dict:
         events = await self._load_events(window)
-        grouped: dict[str, dict[str, list[KpiEvent]]] = defaultdict(lambda: defaultdict(list))
+        grouped: dict[str, dict[str, list[KpiEvent]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         for event in events:
             grouped[event.section][event.metric_key].append(event)
 
@@ -157,10 +179,17 @@ class ObservabilityService:
             if include_expected:
                 metric_names.update(EXPECTED_METRICS.get(section_name, []))
             for metric_name in sorted(metric_names):
-                if metric_contains and metric_contains.lower() not in metric_name.lower():
+                if (
+                    metric_contains
+                    and metric_contains.lower() not in metric_name.lower()
+                ):
                     continue
                 metric_events = grouped.get(section_name, {}).get(metric_name, [])
-                failure_count = sum(1 for event in metric_events if event.payload.get("status") == "failure")
+                failure_count = sum(
+                    1
+                    for event in metric_events
+                    if event.payload.get("status") == "failure"
+                )
                 total = len(metric_events)
                 metric_rating = classify_rating(total, failure_count)
                 if rating and metric_rating != rating:
@@ -177,13 +206,23 @@ class ObservabilityService:
                 )
             if not metrics:
                 continue
-            section_rating = min((str(metric["rating"]) for metric in metrics), key=lambda item: RATING_ORDER[item])
+            section_rating = min(
+                (str(metric["rating"]) for metric in metrics),
+                key=lambda item: RATING_ORDER[item],
+            )
             sections.append(
                 {
                     "section": section_name,
                     "rating": section_rating,
-                    "sampleStatus": "ready" if sum(metric["total"] for metric in metrics) >= 3 else "low_sample",
-                    "successRate": self._to_share(sum(metric["success"] for metric in metrics), sum(metric["total"] for metric in metrics)),
+                    "sampleStatus": (
+                        "ready"
+                        if sum(metric["total"] for metric in metrics) >= 3
+                        else "low_sample"
+                    ),
+                    "successRate": self._to_share(
+                        sum(metric["success"] for metric in metrics),
+                        sum(metric["total"] for metric in metrics),
+                    ),
                     "total": sum(metric["total"] for metric in metrics),
                     "success": sum(metric["success"] for metric in metrics),
                     "failure": sum(metric["failure"] for metric in metrics),
@@ -191,7 +230,13 @@ class ObservabilityService:
                 }
             )
 
-        sections.sort(key=lambda item: (RATING_ORDER[str(item["rating"])], str(item["section"])) if focus else str(item["section"]))
+        sections.sort(
+            key=lambda item: (
+                (RATING_ORDER[str(item["rating"])], str(item["section"]))
+                if focus
+                else str(item["section"])
+            )
+        )
         return {
             "generatedAt": datetime.now(UTC).isoformat(),
             "minimumSampleSize": 3,
@@ -200,16 +245,26 @@ class ObservabilityService:
         }
 
     async def get_provider_diagnostics(self, *, window: str | None = None) -> dict:
-        events = [event for event in await self._load_events(window) if event.metric_key == "provider.gemini.health"]
+        events = [
+            event
+            for event in await self._load_events(window)
+            if event.metric_key == "provider.gemini.health"
+        ]
         groups: dict[str, list[KpiEvent]] = defaultdict(list)
         for event in events:
             groups[str(event.payload.get("provider", "unknown"))].append(event)
         providers = []
         for provider, provider_events in sorted(groups.items()):
             latencies = [
-                float(event.payload.get("elapsedMs", 0)) for event in provider_events if event.payload.get("elapsedMs") is not None
+                float(event.payload.get("elapsedMs", 0))
+                for event in provider_events
+                if event.payload.get("elapsedMs") is not None
             ]
-            failures = [event for event in provider_events if event.payload.get("status") == "failure"]
+            failures = [
+                event
+                for event in provider_events
+                if event.payload.get("status") == "failure"
+            ]
             error_counts: dict[str, int] = defaultdict(int)
             for event in failures:
                 error_counts[str(event.payload.get("error", "unknown_error"))] += 1
@@ -219,21 +274,33 @@ class ObservabilityService:
                     "total": len(provider_events),
                     "success": len(provider_events) - len(failures),
                     "failure": len(failures),
-                    "successRate": self._to_share(len(provider_events) - len(failures), len(provider_events)),
+                    "successRate": self._to_share(
+                        len(provider_events) - len(failures), len(provider_events)
+                    ),
                     "avgLatencyMs": mean(latencies) if latencies else None,
                     "p95LatencyMs": max(latencies) if latencies else None,
                     "p99LatencyMs": max(latencies) if latencies else None,
                     "topErrors": [
                         {"reason": reason, "count": count}
-                        for reason, count in sorted(error_counts.items(), key=lambda item: item[1], reverse=True)
+                        for reason, count in sorted(
+                            error_counts.items(), key=lambda item: item[1], reverse=True
+                        )
                     ],
                 }
             )
-        return {"generatedAt": datetime.now(UTC).isoformat(), "window": window or "today", "providers": providers}
+        return {
+            "generatedAt": datetime.now(UTC).isoformat(),
+            "window": window or "today",
+            "providers": providers,
+        }
 
     async def get_pipeline_diagnostics(self, *, window: str | None = None) -> dict:
         prefixes = ("session.transcription.", "report_context.")
-        events = [event for event in await self._load_events(window) if event.metric_key.startswith(prefixes)]
+        events = [
+            event
+            for event in await self._load_events(window)
+            if event.metric_key.startswith(prefixes)
+        ]
         groups: dict[str, list[KpiEvent]] = defaultdict(list)
         for event in events:
             groups[event.metric_key].append(event)
@@ -246,8 +313,14 @@ class ObservabilityService:
         stages = []
         for metric in sorted(set(groups.keys()) | expected):
             metric_events = groups.get(metric, [])
-            failure_count = sum(1 for event in metric_events if event.payload.get("status") == "failure")
-            latencies = [float(event.payload.get("elapsedMs", 0)) for event in metric_events if event.payload.get("elapsedMs") is not None]
+            failure_count = sum(
+                1 for event in metric_events if event.payload.get("status") == "failure"
+            )
+            latencies = [
+                float(event.payload.get("elapsedMs", 0))
+                for event in metric_events
+                if event.payload.get("elapsedMs") is not None
+            ]
             stages.append(
                 {
                     "metric": metric,
@@ -255,25 +328,59 @@ class ObservabilityService:
                     "total": len(metric_events),
                     "success": len(metric_events) - failure_count,
                     "failure": failure_count,
-                    "successRate": self._to_share(len(metric_events) - failure_count, len(metric_events)),
+                    "successRate": self._to_share(
+                        len(metric_events) - failure_count, len(metric_events)
+                    ),
                     "avgDurationMs": mean(latencies) if latencies else None,
-                    "lastSeenAt": metric_events[-1].created_at.isoformat() if metric_events else datetime.now(UTC).isoformat(),
+                    "lastSeenAt": (
+                        metric_events[-1].created_at.isoformat()
+                        if metric_events
+                        else datetime.now(UTC).isoformat()
+                    ),
                 }
             )
-        return {"generatedAt": datetime.now(UTC).isoformat(), "window": window or "today", "stages": stages}
+        return {
+            "generatedAt": datetime.now(UTC).isoformat(),
+            "window": window or "today",
+            "stages": stages,
+        }
 
-    async def get_report_context_fallback_diagnostics(self, *, window: str | None = None) -> dict:
-        events = [event for event in await self._load_events(window) if event.metric_key == "report_context.fallback_path"]
+    async def get_report_context_fallback_diagnostics(
+        self, *, window: str | None = None
+    ) -> dict:
+        events = [
+            event
+            for event in await self._load_events(window)
+            if event.metric_key == "report_context.fallback_path"
+        ]
         total = len(events)
-        fallback_used = sum(1 for event in events if bool(event.payload.get("fallbackUsed")))
-        by_operation_counts: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "fallbackUsed": 0, "primaryPath": 0, "failure": 0, "success": 0})
+        fallback_used = sum(
+            1 for event in events if bool(event.payload.get("fallbackUsed"))
+        )
+        by_operation_counts: dict[str, dict[str, int]] = defaultdict(
+            lambda: {
+                "total": 0,
+                "fallbackUsed": 0,
+                "primaryPath": 0,
+                "failure": 0,
+                "success": 0,
+            }
+        )
         for event in events:
             operation = str(event.payload.get("operation", "unknown"))
             by_operation_counts[operation]["total"] += 1
-            by_operation_counts[operation]["fallbackUsed"] += 1 if bool(event.payload.get("fallbackUsed")) else 0
-            by_operation_counts[operation]["primaryPath"] += 0 if bool(event.payload.get("fallbackUsed")) else 1
-            by_operation_counts[operation]["failure"] += 1 if event.payload.get("status") == "failure" else 0
-            by_operation_counts[operation]["success"] += 1 if event.payload.get("status") == "success" else 0
+            by_operation_counts[operation]["fallbackUsed"] += (
+                1 if bool(event.payload.get("fallbackUsed")) else 0
+            )
+            by_operation_counts[operation]["primaryPath"] += (
+                0 if bool(event.payload.get("fallbackUsed")) else 1
+            )
+            by_operation_counts[operation]["failure"] += (
+                1 if event.payload.get("status") == "failure" else 0
+            )
+            by_operation_counts[operation]["success"] += (
+                1 if event.payload.get("status") == "success" else 0
+            )
         return {
             "generatedAt": datetime.now(UTC).isoformat(),
             "window": window or "today",
@@ -281,15 +388,23 @@ class ObservabilityService:
                 "total": total,
                 "fallbackUsed": fallback_used,
                 "primaryPath": total - fallback_used,
-                "failure": sum(1 for event in events if event.payload.get("status") == "failure"),
-                "success": sum(1 for event in events if event.payload.get("status") == "success"),
+                "failure": sum(
+                    1 for event in events if event.payload.get("status") == "failure"
+                ),
+                "success": sum(
+                    1 for event in events if event.payload.get("status") == "success"
+                ),
                 "fallbackRate": (fallback_used / total) if total else 0,
             },
             "byOperation": [
                 {
                     "operation": operation,
                     **counts,
-                    "fallbackRate": (counts["fallbackUsed"] / counts["total"]) if counts["total"] else 0,
+                    "fallbackRate": (
+                        (counts["fallbackUsed"] / counts["total"])
+                        if counts["total"]
+                        else 0
+                    ),
                 }
                 for operation, counts in sorted(by_operation_counts.items())
             ],
@@ -299,10 +414,20 @@ class ObservabilityService:
     async def get_event_trends(self, *, window: str | None = None) -> dict:
         events = await self._load_events(window)
         bucket = {
-            "bucket": datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "bucket": datetime.now(UTC)
+            .replace(hour=0, minute=0, second=0, microsecond=0)
+            .isoformat(),
             "totalEvents": len(events),
-            "failures": sum(1 for event in events if event.payload.get("status") == "failure"),
-            "successRate": self._to_share(len(events) - sum(1 for event in events if event.payload.get("status") == "failure"), len(events)),
+            "failures": sum(
+                1 for event in events if event.payload.get("status") == "failure"
+            ),
+            "successRate": self._to_share(
+                len(events)
+                - sum(
+                    1 for event in events if event.payload.get("status") == "failure"
+                ),
+                len(events),
+            ),
         }
         stage_groups: dict[str, list[KpiEvent]] = defaultdict(list)
         for event in events:
@@ -310,9 +435,27 @@ class ObservabilityService:
                 stage_groups[event.metric_key].append(event)
         stage_latency = []
         for metric, metric_events in sorted(stage_groups.items()):
-            latencies = [float(event.payload.get("elapsedMs", 0)) for event in metric_events]
-            stage_latency.append({"metric": metric, "points": [{"bucket": bucket["bucket"], "avgLatencyMs": mean(latencies) if latencies else 0, "samples": len(latencies)}]})
-        return {"generatedAt": datetime.now(UTC).isoformat(), "window": window or "today", "points": [bucket], "stageLatency": stage_latency}
+            latencies = [
+                float(event.payload.get("elapsedMs", 0)) for event in metric_events
+            ]
+            stage_latency.append(
+                {
+                    "metric": metric,
+                    "points": [
+                        {
+                            "bucket": bucket["bucket"],
+                            "avgLatencyMs": mean(latencies) if latencies else 0,
+                            "samples": len(latencies),
+                        }
+                    ],
+                }
+            )
+        return {
+            "generatedAt": datetime.now(UTC).isoformat(),
+            "window": window or "today",
+            "points": [bucket],
+            "stageLatency": stage_latency,
+        }
 
     async def get_reliability_alerts(self) -> dict:
         scorecard = await self.get_scorecard(focus=True)
@@ -339,10 +482,18 @@ class ObservabilityService:
         confidence = {
             "minimumConsultations": MINIMUM_CONSULTATIONS_FOR_VERDICT,
             "consultationCount": current["consultationsEntered"],
-            "hasEnoughVolume": current["consultationsEntered"] >= MINIMUM_CONSULTATIONS_FOR_VERDICT,
+            "hasEnoughVolume": current["consultationsEntered"]
+            >= MINIMUM_CONSULTATIONS_FOR_VERDICT,
         }
-        doctor_path_status = self._resolve_doctor_path_status(current, freshness["isStale"], confidence["hasEnoughVolume"])
-        overall_status = self._resolve_overall_status(current, doctor_path_status, freshness["isStale"], confidence["hasEnoughVolume"])
+        doctor_path_status = self._resolve_doctor_path_status(
+            current, freshness["isStale"], confidence["hasEnoughVolume"]
+        )
+        overall_status = self._resolve_overall_status(
+            current,
+            doctor_path_status,
+            freshness["isStale"],
+            confidence["hasEnoughVolume"],
+        )
         return {
             "generatedAt": datetime.now(UTC).isoformat(),
             "window": window,
@@ -366,21 +517,33 @@ class ObservabilityService:
                 "doctorVisibleFailure": current["failed"],
             },
             "shares": {
-                "healthy": self._to_share(current["healthy"], current["consultationsEntered"]),
-                "degradedProtected": self._to_share(current["degradedProtected"], current["consultationsEntered"]),
-                "doctorVisibleDisruption": self._to_share(current["disrupted"], current["consultationsEntered"]),
-                "doctorVisibleFailure": self._to_share(current["failed"], current["consultationsEntered"]),
+                "healthy": self._to_share(
+                    current["healthy"], current["consultationsEntered"]
+                ),
+                "degradedProtected": self._to_share(
+                    current["degradedProtected"], current["consultationsEntered"]
+                ),
+                "doctorVisibleDisruption": self._to_share(
+                    current["disrupted"], current["consultationsEntered"]
+                ),
+                "doctorVisibleFailure": self._to_share(
+                    current["failed"], current["consultationsEntered"]
+                ),
             },
-            "comparison": None
-            if previous is None
-            else {
-                "label": previous["label"],
-                "consultationsEntered": previous["aggregate"]["consultationsEntered"],
-                "healthy": previous["aggregate"]["healthy"],
-                "degradedProtected": previous["aggregate"]["degradedProtected"],
-                "doctorVisibleDisruption": previous["aggregate"]["disrupted"],
-                "doctorVisibleFailure": previous["aggregate"]["failed"],
-            },
+            "comparison": (
+                None
+                if previous is None
+                else {
+                    "label": previous["label"],
+                    "consultationsEntered": previous["aggregate"][
+                        "consultationsEntered"
+                    ],
+                    "healthy": previous["aggregate"]["healthy"],
+                    "degradedProtected": previous["aggregate"]["degradedProtected"],
+                    "doctorVisibleDisruption": previous["aggregate"]["disrupted"],
+                    "doctorVisibleFailure": previous["aggregate"]["failed"],
+                }
+            ),
             "disruptionByStage": current["disruptionByStage"],
         }
 
@@ -405,11 +568,22 @@ class ObservabilityService:
             return None
         current_range = self._resolve_window_range(window)
         duration = current_range["end"] - current_range["start"]
-        previous_events = await self._load_events_between(current_range["start"] - duration, current_range["start"])
-        return {"label": "Previous equivalent window", "aggregate": self._aggregate_consultation_ops(previous_events)}
+        previous_events = await self._load_events_between(
+            current_range["start"] - duration, current_range["start"]
+        )
+        return {
+            "label": "Previous equivalent window",
+            "aggregate": self._aggregate_consultation_ops(previous_events),
+        }
 
-    async def _load_events_between(self, start: datetime, end: datetime) -> list[KpiEvent]:
-        stmt = select(KpiEvent).where(KpiEvent.created_at >= start, KpiEvent.created_at <= end).order_by(KpiEvent.created_at.asc())
+    async def _load_events_between(
+        self, start: datetime, end: datetime
+    ) -> list[KpiEvent]:
+        stmt = (
+            select(KpiEvent)
+            .where(KpiEvent.created_at >= start, KpiEvent.created_at <= end)
+            .order_by(KpiEvent.created_at.asc())
+        )
         return list((await self.session.scalars(stmt)).all())
 
     def _resolve_window_range(self, window: str) -> dict[str, datetime]:
@@ -434,7 +608,10 @@ class ObservabilityService:
 
             if metric.startswith("provider.") and status == "failure":
                 provider_failures += 1
-            if metric == "report_context.fallback_path" and payload.get("fallbackUsed") is True:
+            if (
+                metric == "report_context.fallback_path"
+                and payload.get("fallbackUsed") is True
+            ):
                 report_fallbacks += 1
             if metric == "fettle_sync.failure" and status == "failure":
                 sync_failures += 1
@@ -470,7 +647,9 @@ class ObservabilityService:
                 aggregate["startedAt"] = timestamp
             if aggregate["lastSeenAt"] is None or timestamp > aggregate["lastSeenAt"]:
                 aggregate["lastSeenAt"] = timestamp
-            if self._is_critical_metric(metric) and (latest_critical_event_at is None or timestamp > latest_critical_event_at):
+            if self._is_critical_metric(metric) and (
+                latest_critical_event_at is None or timestamp > latest_critical_event_at
+            ):
                 latest_critical_event_at = timestamp
 
             if metric == "transcription.result" and status == "failure":
@@ -481,19 +660,28 @@ class ObservabilityService:
                 if status == "success":
                     aggregate["transcriptionSucceededAt"] = timestamp
                     if isinstance(payload.get("elapsedMs"), (int, float)):
-                        aggregate["transcriptionLatencyMs"] = float(payload["elapsedMs"])
+                        aggregate["transcriptionLatencyMs"] = float(
+                            payload["elapsedMs"]
+                        )
                 else:
                     aggregate["transcriptionFailed"] = True
             if metric == "session.transcription.dead_letter" and status == "failure":
                 aggregate["transcriptionFailed"] = True
-            if metric in {"session.report_context.extract", "report_context.extract_parse"}:
+            if metric in {
+                "session.report_context.extract",
+                "report_context.extract_parse",
+            }:
                 if status == "success":
                     aggregate["reportReadyAt"] = timestamp
                     if isinstance(payload.get("elapsedMs"), (int, float)):
                         aggregate["reportReadyLatencyMs"] = float(payload["elapsedMs"])
                 else:
                     aggregate["reportFailed"] = True
-            if metric == "report_context.fallback_path" and payload.get("fallbackUsed") is True and status == "success":
+            if (
+                metric == "report_context.fallback_path"
+                and payload.get("fallbackUsed") is True
+                and status == "success"
+            ):
                 aggregate["reportRescued"] = True
             if metric == "fettle_sync.failure" and status == "failure":
                 aggregate["syncFailed"] = True
@@ -502,12 +690,22 @@ class ObservabilityService:
             if metric == "fettle_sync.success" and status == "success":
                 aggregate["syncSucceeded"] = True
 
-        outcomes = [self._classify_consultation(item) for item in sessions.values() if item["enteredCriticalPath"]]
+        outcomes = [
+            self._classify_consultation(item)
+            for item in sessions.values()
+            if item["enteredCriticalPath"]
+        ]
         consultations_entered = len(outcomes)
         healthy = len([item for item in outcomes if item["status"] == "healthy"])
-        degraded = len([item for item in outcomes if item["status"] == "degraded_protected"])
-        disrupted = len([item for item in outcomes if item["status"] == "doctor_visible_disruption"])
-        failed = len([item for item in outcomes if item["status"] == "doctor_visible_failure"])
+        degraded = len(
+            [item for item in outcomes if item["status"] == "degraded_protected"]
+        )
+        disrupted = len(
+            [item for item in outcomes if item["status"] == "doctor_visible_disruption"]
+        )
+        failed = len(
+            [item for item in outcomes if item["status"] == "doctor_visible_failure"]
+        )
         return {
             "consultationOutcomes": outcomes,
             "consultationsEntered": consultations_entered,
@@ -515,20 +713,36 @@ class ObservabilityService:
             "degradedProtected": degraded,
             "disrupted": disrupted,
             "failed": failed,
-            "doctorVisibleDisruptionCount": len([item for item in outcomes if item["doctorVisibleDisruption"]]),
-            "rescuedConsultations": len([item for item in outcomes if item["rescuedPath"]]),
-            "internalPainConsultations": len([item for item in outcomes if item["internalPain"]]),
-            "disruptionByStage": self._summarize_disruption_by_stage(outcomes, consultations_entered),
+            "doctorVisibleDisruptionCount": len(
+                [item for item in outcomes if item["doctorVisibleDisruption"]]
+            ),
+            "rescuedConsultations": len(
+                [item for item in outcomes if item["rescuedPath"]]
+            ),
+            "internalPainConsultations": len(
+                [item for item in outcomes if item["internalPain"]]
+            ),
+            "disruptionByStage": self._summarize_disruption_by_stage(
+                outcomes, consultations_entered
+            ),
             "syncDeadLetters": sync_dead_letters,
             "syncFailures": sync_failures,
             "providerFailures": provider_failures,
             "reportFallbacks": report_fallbacks,
-            **({"latestCriticalEventAt": latest_critical_event_at} if latest_critical_event_at else {}),
+            **(
+                {"latestCriticalEventAt": latest_critical_event_at}
+                if latest_critical_event_at
+                else {}
+            ),
         }
 
     def _classify_consultation(self, session: dict) -> dict:
         now_ms = datetime.now(UTC).timestamp() * 1000
-        last_seen_ms = datetime.fromisoformat(session["lastSeenAt"]).timestamp() * 1000 if session.get("lastSeenAt") else now_ms
+        last_seen_ms = (
+            datetime.fromisoformat(session["lastSeenAt"]).timestamp() * 1000
+            if session.get("lastSeenAt")
+            else now_ms
+        )
         transcription_pending_too_long = (
             not session.get("transcriptionSucceededAt")
             and not session.get("transcriptionFailed")
@@ -539,43 +753,79 @@ class ObservabilityService:
             not session.get("reportReadyAt")
             and not session.get("reportFailed")
             and bool(session.get("transcriptionSucceededAt"))
-            and (session.get("reportRescued") or session.get("reportReadyLatencyMs") is not None)
+            and (
+                session.get("reportRescued")
+                or session.get("reportReadyLatencyMs") is not None
+            )
             and now_ms - last_seen_ms >= REPORT_READY_DISRUPTION_THRESHOLD_MS
         )
         if session.get("transcriptionFailed") or session.get("reportFailed"):
             return {
                 "sessionId": session["sessionId"],
                 "status": "doctor_visible_failure",
-                "stage": "transcription" if session.get("transcriptionFailed") else "report_ready",
+                "stage": (
+                    "transcription"
+                    if session.get("transcriptionFailed")
+                    else "report_ready"
+                ),
                 "doctorVisibleDisruption": True,
-                "rescuedPath": session.get("transcriptionRescued") or session.get("reportRescued"),
-                "internalPain": session.get("syncFailed") or session.get("syncDeadLetter"),
+                "rescuedPath": session.get("transcriptionRescued")
+                or session.get("reportRescued"),
+                "internalPain": session.get("syncFailed")
+                or session.get("syncDeadLetter"),
             }
         if (
             transcription_pending_too_long
             or report_pending_too_long
-            or (isinstance(session.get("transcriptionLatencyMs"), (int, float)) and session["transcriptionLatencyMs"] >= TRANSCRIPTION_DISRUPTION_THRESHOLD_MS)
-            or (isinstance(session.get("reportReadyLatencyMs"), (int, float)) and session["reportReadyLatencyMs"] >= REPORT_READY_DISRUPTION_THRESHOLD_MS)
+            or (
+                isinstance(session.get("transcriptionLatencyMs"), (int, float))
+                and session["transcriptionLatencyMs"]
+                >= TRANSCRIPTION_DISRUPTION_THRESHOLD_MS
+            )
+            or (
+                isinstance(session.get("reportReadyLatencyMs"), (int, float))
+                and session["reportReadyLatencyMs"]
+                >= REPORT_READY_DISRUPTION_THRESHOLD_MS
+            )
         ):
             return {
                 "sessionId": session["sessionId"],
                 "status": "doctor_visible_disruption",
-                "stage": "transcription"
-                if transcription_pending_too_long
-                or (isinstance(session.get("transcriptionLatencyMs"), (int, float)) and session["transcriptionLatencyMs"] >= TRANSCRIPTION_DISRUPTION_THRESHOLD_MS)
-                else "report_ready",
+                "stage": (
+                    "transcription"
+                    if transcription_pending_too_long
+                    or (
+                        isinstance(session.get("transcriptionLatencyMs"), (int, float))
+                        and session["transcriptionLatencyMs"]
+                        >= TRANSCRIPTION_DISRUPTION_THRESHOLD_MS
+                    )
+                    else "report_ready"
+                ),
                 "doctorVisibleDisruption": True,
-                "rescuedPath": session.get("transcriptionRescued") or session.get("reportRescued"),
-                "internalPain": session.get("syncFailed") or session.get("syncDeadLetter"),
+                "rescuedPath": session.get("transcriptionRescued")
+                or session.get("reportRescued"),
+                "internalPain": session.get("syncFailed")
+                or session.get("syncDeadLetter"),
             }
-        if session.get("transcriptionRescued") or session.get("reportRescued") or session.get("syncDeadLetter") or session.get("syncFailed"):
+        if (
+            session.get("transcriptionRescued")
+            or session.get("reportRescued")
+            or session.get("syncDeadLetter")
+            or session.get("syncFailed")
+        ):
             return {
                 "sessionId": session["sessionId"],
                 "status": "degraded_protected",
-                "stage": "sync" if session.get("syncDeadLetter") or session.get("syncFailed") else "transcription",
+                "stage": (
+                    "sync"
+                    if session.get("syncDeadLetter") or session.get("syncFailed")
+                    else "transcription"
+                ),
                 "doctorVisibleDisruption": False,
-                "rescuedPath": session.get("transcriptionRescued") or session.get("reportRescued"),
-                "internalPain": session.get("syncFailed") or session.get("syncDeadLetter"),
+                "rescuedPath": session.get("transcriptionRescued")
+                or session.get("reportRescued"),
+                "internalPain": session.get("syncFailed")
+                or session.get("syncDeadLetter"),
             }
         return {
             "sessionId": session["sessionId"],
@@ -586,10 +836,15 @@ class ObservabilityService:
             "internalPain": False,
         }
 
-    def _summarize_disruption_by_stage(self, outcomes: list[dict], denominator: int) -> list[dict]:
+    def _summarize_disruption_by_stage(
+        self, outcomes: list[dict], denominator: int
+    ) -> list[dict]:
         counts: dict[str, int] = defaultdict(int)
         for outcome in outcomes:
-            if outcome["status"] not in {"doctor_visible_disruption", "doctor_visible_failure"}:
+            if outcome["status"] not in {
+                "doctor_visible_disruption",
+                "doctor_visible_failure",
+            }:
                 continue
             counts[outcome["stage"]] += 1
         labels = {
@@ -612,22 +867,43 @@ class ObservabilityService:
             reverse=True,
         )
 
-    def _build_freshness(self, window: str, latest_critical_event_at: str | None) -> dict:
+    def _build_freshness(
+        self, window: str, latest_critical_event_at: str | None
+    ) -> dict:
         if window == "all_time":
             return {
-                "staleThresholdMinutes": round(LATEST_EVENT_STALE_THRESHOLD_MS["last_30d"] / 60_000),
+                "staleThresholdMinutes": round(
+                    LATEST_EVENT_STALE_THRESHOLD_MS["last_30d"] / 60_000
+                ),
                 "isStale": False,
-                **({"latestCriticalEventAt": latest_critical_event_at} if latest_critical_event_at else {}),
+                **(
+                    {"latestCriticalEventAt": latest_critical_event_at}
+                    if latest_critical_event_at
+                    else {}
+                ),
             }
-        threshold_ms = LATEST_EVENT_STALE_THRESHOLD_MS.get(window, LATEST_EVENT_STALE_THRESHOLD_MS["last_24h"])
-        latest_ms = datetime.fromisoformat(latest_critical_event_at).timestamp() * 1000 if latest_critical_event_at else None
+        threshold_ms = LATEST_EVENT_STALE_THRESHOLD_MS.get(
+            window, LATEST_EVENT_STALE_THRESHOLD_MS["last_24h"]
+        )
+        latest_ms = (
+            datetime.fromisoformat(latest_critical_event_at).timestamp() * 1000
+            if latest_critical_event_at
+            else None
+        )
         return {
             "staleThresholdMinutes": round(threshold_ms / 60_000),
-            "isStale": latest_ms is not None and (datetime.now(UTC).timestamp() * 1000 - latest_ms > threshold_ms),
-            **({"latestCriticalEventAt": latest_critical_event_at} if latest_critical_event_at else {}),
+            "isStale": latest_ms is not None
+            and (datetime.now(UTC).timestamp() * 1000 - latest_ms > threshold_ms),
+            **(
+                {"latestCriticalEventAt": latest_critical_event_at}
+                if latest_critical_event_at
+                else {}
+            ),
         }
 
-    def _resolve_doctor_path_status(self, current: dict, is_stale: bool, has_enough_volume: bool) -> str:
+    def _resolve_doctor_path_status(
+        self, current: dict, is_stale: bool, has_enough_volume: bool
+    ) -> str:
         if is_stale and current["consultationsEntered"] > 0:
             return "monitoring_stale"
         if not has_enough_volume:
@@ -640,14 +916,28 @@ class ObservabilityService:
             return "degraded_protected"
         return "healthy"
 
-    def _resolve_overall_status(self, current: dict, doctor_path_status: str, is_stale: bool, has_enough_volume: bool) -> str:
+    def _resolve_overall_status(
+        self,
+        current: dict,
+        doctor_path_status: str,
+        is_stale: bool,
+        has_enough_volume: bool,
+    ) -> str:
         if is_stale and current["consultationsEntered"] > 0:
             return "monitoring_stale"
         if not has_enough_volume:
             return "insufficient_volume"
-        if doctor_path_status in {"doctor_visible_failure", "doctor_visible_disruption"}:
+        if doctor_path_status in {
+            "doctor_visible_failure",
+            "doctor_visible_disruption",
+        }:
             return doctor_path_status
-        if current["degradedProtected"] > 0 or current["syncDeadLetters"] > 0 or current["syncFailures"] > 0 or current["providerFailures"] > 0:
+        if (
+            current["degradedProtected"] > 0
+            or current["syncDeadLetters"] > 0
+            or current["syncFailures"] > 0
+            or current["providerFailures"] > 0
+        ):
             return "degraded_protected"
         return "healthy"
 
@@ -667,46 +957,144 @@ class ObservabilityService:
     def _build_cause_list(self, current: dict, overall_status: str) -> list[dict]:
         causes: list[dict] = []
         if overall_status == "monitoring_stale":
-            causes.append({"id": "stale-monitoring", "label": "Monitoring stale", "tone": "bad", "summary": "Hero metrics are not fresh enough to trust the operational verdict.", "weight": 100})
+            causes.append(
+                {
+                    "id": "stale-monitoring",
+                    "label": "Monitoring stale",
+                    "tone": "bad",
+                    "summary": "Hero metrics are not fresh enough to trust the operational verdict.",
+                    "weight": 100,
+                }
+            )
         if current["failed"] > 0:
-            causes.append({"id": "doctor-visible-failure", "label": "Doctor-visible failures", "tone": "bad", "summary": f"{current['failed']} consultation{'s' if current['failed'] != 1 else ''} failed before the expected outcome was ready.", "weight": 90})
+            causes.append(
+                {
+                    "id": "doctor-visible-failure",
+                    "label": "Doctor-visible failures",
+                    "tone": "bad",
+                    "summary": f"{current['failed']} consultation{'s' if current['failed'] != 1 else ''} failed before the expected outcome was ready.",
+                    "weight": 90,
+                }
+            )
         if current["disrupted"] > 0:
-            causes.append({"id": "doctor-visible-disruption", "label": "Doctor-visible disruption", "tone": "bad", "summary": f"{current['disrupted']} consultation{'s' if current['disrupted'] != 1 else ''} crossed the acceptable delay threshold.", "weight": 80})
+            causes.append(
+                {
+                    "id": "doctor-visible-disruption",
+                    "label": "Doctor-visible disruption",
+                    "tone": "bad",
+                    "summary": f"{current['disrupted']} consultation{'s' if current['disrupted'] != 1 else ''} crossed the acceptable delay threshold.",
+                    "weight": 80,
+                }
+            )
         if current["degradedProtected"] > 0:
-            causes.append({"id": "rescued-paths", "label": "Backup paths used", "tone": "watch", "summary": f"{current['degradedProtected']} consultation{'s' if current['degradedProtected'] != 1 else ''} completed only after a degraded or rescued path.", "weight": 70})
+            causes.append(
+                {
+                    "id": "rescued-paths",
+                    "label": "Backup paths used",
+                    "tone": "watch",
+                    "summary": f"{current['degradedProtected']} consultation{'s' if current['degradedProtected'] != 1 else ''} completed only after a degraded or rescued path.",
+                    "weight": 70,
+                }
+            )
         if current["syncDeadLetters"] > 0:
-            causes.append({"id": "sync-dead-letter", "label": "Sync backlog needs replay", "tone": "watch", "summary": f"{current['syncDeadLetters']} sync job{'s' if current['syncDeadLetters'] != 1 else ''} reached dead-letter.", "weight": 60})
+            causes.append(
+                {
+                    "id": "sync-dead-letter",
+                    "label": "Sync backlog needs replay",
+                    "tone": "watch",
+                    "summary": f"{current['syncDeadLetters']} sync job{'s' if current['syncDeadLetters'] != 1 else ''} reached dead-letter.",
+                    "weight": 60,
+                }
+            )
         if current["providerFailures"] > 0 and not causes:
-            causes.append({"id": "provider-errors", "label": "Provider errors observed", "tone": "watch", "summary": f"{current['providerFailures']} provider failure event{'s' if current['providerFailures'] != 1 else ''} occurred, but the doctor-critical path stayed healthy.", "weight": 40})
+            causes.append(
+                {
+                    "id": "provider-errors",
+                    "label": "Provider errors observed",
+                    "tone": "watch",
+                    "summary": f"{current['providerFailures']} provider failure event{'s' if current['providerFailures'] != 1 else ''} occurred, but the doctor-critical path stayed healthy.",
+                    "weight": 40,
+                }
+            )
         if not causes:
-            causes.append({"id": "stable", "label": "Doctor-critical flow stable", "tone": "good", "summary": "No doctor-visible failures, delays, or rescued consultations were detected.", "weight": 1})
+            causes.append(
+                {
+                    "id": "stable",
+                    "label": "Doctor-critical flow stable",
+                    "tone": "good",
+                    "summary": "No doctor-visible failures, delays, or rescued consultations were detected.",
+                    "weight": 1,
+                }
+            )
         causes.sort(key=lambda item: item["weight"], reverse=True)
-        return [{k: v for k, v in cause.items() if k != "weight"} for cause in causes[:3]]
+        return [
+            {k: v for k, v in cause.items() if k != "weight"} for cause in causes[:3]
+        ]
 
     def _build_actions(self, current: dict, overall_status: str) -> list[dict]:
         if overall_status == "monitoring_stale":
-            return [{"label": "Check KPI ingestion and fresh event flow", "href": "#diagnostics-pipeline", "kind": "intervene"}]
+            return [
+                {
+                    "label": "Check KPI ingestion and fresh event flow",
+                    "href": "#diagnostics-pipeline",
+                    "kind": "intervene",
+                }
+            ]
         if current["failed"] > 0 or current["disrupted"] > 0:
             return [
-                {"label": "Inspect consultation path failures first", "href": "#diagnostics-pipeline", "kind": "intervene"},
-                {"label": "Review provider diagnostics for the affected window", "href": "#diagnostics-providers", "kind": "investigate"},
+                {
+                    "label": "Inspect consultation path failures first",
+                    "href": "#diagnostics-pipeline",
+                    "kind": "intervene",
+                },
+                {
+                    "label": "Review provider diagnostics for the affected window",
+                    "href": "#diagnostics-providers",
+                    "kind": "investigate",
+                },
             ]
         if current["syncDeadLetters"] > 0:
-            return [{"label": "Drain replay backlog before it becomes doctor-visible", "href": "#diagnostics-sync", "kind": "intervene"}]
+            return [
+                {
+                    "label": "Drain replay backlog before it becomes doctor-visible",
+                    "href": "#diagnostics-sync",
+                    "kind": "intervene",
+                }
+            ]
         if current["degradedProtected"] > 0:
-            return [{"label": "Watch rescued-path volume and review fallback diagnostics", "href": "#diagnostics-report-fallback", "kind": "monitor"}]
-        return [{"label": "Monitor only", "href": "#diagnostics-trends", "kind": "monitor"}]
+            return [
+                {
+                    "label": "Watch rescued-path volume and review fallback diagnostics",
+                    "href": "#diagnostics-report-fallback",
+                    "kind": "monitor",
+                }
+            ]
+        return [
+            {"label": "Monitor only", "href": "#diagnostics-trends", "kind": "monitor"}
+        ]
 
     def _build_reassurance(self, current: dict, overall_status: str) -> list[str]:
         reassurance: list[str] = []
         if current["healthy"] > 0:
-            reassurance.append(f"{current['healthy']} consultation{'s' if current['healthy'] != 1 else ''} stayed on the primary healthy path.")
-        if overall_status != "doctor_visible_failure" and current["syncDeadLetters"] == 0:
-            reassurance.append("No sync dead-letter backlog is blocking the current view.")
+            reassurance.append(
+                f"{current['healthy']} consultation{'s' if current['healthy'] != 1 else ''} stayed on the primary healthy path."
+            )
+        if (
+            overall_status != "doctor_visible_failure"
+            and current["syncDeadLetters"] == 0
+        ):
+            reassurance.append(
+                "No sync dead-letter backlog is blocking the current view."
+            )
         return reassurance[:2]
 
     def _is_critical_metric(self, metric: str) -> bool:
-        return metric in {"session.audio_upload", "session.transcription.end_to_end", "session.report_context.extract", "transcription.result"}
+        return metric in {
+            "session.audio_upload",
+            "session.transcription.end_to_end",
+            "session.report_context.extract",
+            "transcription.result",
+        }
 
     def _to_share(self, value: int, total: int) -> float:
         if total <= 0:

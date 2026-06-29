@@ -8,7 +8,9 @@ def detect_audio_mime_type_from_bytes(data: bytes) -> str | None:
         return "audio/webm"
     if data[0:4] == b"OggS":
         return "audio/ogg"
-    if data[0:3] == b"ID3" or (len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
+    if data[0:3] == b"ID3" or (
+        len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0
+    ):
         return "audio/mpeg"
     if data[0:4] == b"RIFF" and data[8:12] == b"WAVE":
         return "audio/wav"
@@ -24,8 +26,12 @@ def canonicalize_audio_upload(
     duration_seconds: float | None,
     data: bytes,
 ) -> dict[str, object]:
-    canonical_name = (file_name or f"session-{session_id}.webm").strip() or f"session-{session_id}.webm"
-    canonical_name = canonical_name.replace("/", "_").replace("\\", "_").replace(":", "_")
+    canonical_name = (
+        file_name or f"session-{session_id}.webm"
+    ).strip() or f"session-{session_id}.webm"
+    canonical_name = (
+        canonical_name.replace("/", "_").replace("\\", "_").replace(":", "_")
+    )
     header_mime = (mime_type or "application/octet-stream").split(";")[0].strip()
     detected_mime = detect_audio_mime_type_from_bytes(data)
     resolved_mime = detected_mime or header_mime

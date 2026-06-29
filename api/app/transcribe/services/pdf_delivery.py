@@ -16,7 +16,9 @@ from api.app.transcribe.schemas.common import ErrorResponse
 
 
 class PdfDeliveryService:
-    def __init__(self, repository, settings: Settings, storage: LocalStorage | None = None) -> None:
+    def __init__(
+        self, repository, settings: Settings, storage: LocalStorage | None = None
+    ) -> None:
         self.repository = repository
         self.settings = settings
         self.storage = storage or LocalStorage()
@@ -31,10 +33,15 @@ class PdfDeliveryService:
         parsed = self._parse_settings_body(body)
         saved = await self.repository.save_pdf_delivery_settings(session_id, **parsed)
         if saved is None:
-            raise HTTPException(status_code=404, detail=ErrorResponse(message="Session not found.").model_dump())
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(message="Session not found.").model_dump(),
+            )
         return await self._status_or_404(session_id)
 
-    async def get_session_delivery_status(self, session_id: str, doctor_id: str | None = None) -> dict:
+    async def get_session_delivery_status(
+        self, session_id: str, doctor_id: str | None = None
+    ) -> dict:
         await self._load_session(session_id, doctor_id)
         return await self._status_or_404(session_id)
 
@@ -48,7 +55,9 @@ class PdfDeliveryService:
         if session.documentArtifact is None:
             raise HTTPException(
                 status_code=409,
-                detail=ErrorResponse(message="Generate the consultation PDF before sending it on WhatsApp.").model_dump(),
+                detail=ErrorResponse(
+                    message="Generate the consultation PDF before sending it on WhatsApp."
+                ).model_dump(),
             )
         parsed = self._parse_settings_body(body)
         await self.repository.save_pdf_delivery_settings(session_id, **parsed)
@@ -107,7 +116,9 @@ class PdfDeliveryService:
         provider_status: str | None,
         error_message: str | None = None,
     ) -> dict | None:
-        job = await self.repository.get_pdf_delivery_job_by_provider_message_id(provider_message_id)
+        job = await self.repository.get_pdf_delivery_job_by_provider_message_id(
+            provider_message_id
+        )
         if job is None:
             return None
         next_status = map_twilio_message_status(provider_status)
@@ -145,19 +156,27 @@ class PdfDeliveryService:
         else:
             session = await self.repository.get_session(session_id, doctor_id)
         if session is None:
-            raise HTTPException(status_code=404, detail=ErrorResponse(message="Session not found.").model_dump())
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(message="Session not found.").model_dump(),
+            )
         return session
 
     async def _status_or_404(self, session_id: str) -> dict:
         status = await self.repository.get_pdf_delivery_status(session_id)
         if status is None:
-            raise HTTPException(status_code=404, detail=ErrorResponse(message="Session not found.").model_dump())
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(message="Session not found.").model_dump(),
+            )
         return status
 
     def _parse_settings_body(self, body: dict) -> dict:
         patient_enabled = bool(body.get("patientEnabled", True))
         pharmacy_enabled = bool(body.get("pharmacyEnabled", False))
-        pharmacy = body.get("pharmacy") if isinstance(body.get("pharmacy"), dict) else None
+        pharmacy = (
+            body.get("pharmacy") if isinstance(body.get("pharmacy"), dict) else None
+        )
         if pharmacy_enabled:
             pharmacy_name = str((pharmacy or {}).get("name", "")).strip()
             pharmacy_phone = str((pharmacy or {}).get("phoneNumber", "")).strip()
@@ -180,10 +199,23 @@ class PdfDeliveryService:
     def _create_media_token(self, session_id: str) -> str:
         payload = {
             "sessionId": session_id,
-            "exp": int((datetime.now(UTC) + timedelta(seconds=self.settings.pdf_delivery_token_ttl_seconds)).timestamp()),
+            "exp": int(
+                (
+                    datetime.now(UTC)
+                    + timedelta(seconds=self.settings.pdf_delivery_token_ttl_seconds)
+                ).timestamp()
+            ),
         }
-        encoded_payload = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
-        signature = hmac.new(self._token_secret(), encoded_payload.encode(), hashlib.sha256).digest()
+        encoded_payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(payload, separators=(",", ":")).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        signature = hmac.new(
+            self._token_secret(), encoded_payload.encode(), hashlib.sha256
+        ).digest()
         encoded_signature = base64.urlsafe_b64encode(signature).decode().rstrip("=")
         return f"{encoded_payload}.{encoded_signature}"
 
@@ -193,12 +225,20 @@ class PdfDeliveryService:
         except ValueError:
             return None
         expected_signature = (
-            base64.urlsafe_b64encode(hmac.new(self._token_secret(), encoded_payload.encode(), hashlib.sha256).digest()).decode().rstrip("=")
+            base64.urlsafe_b64encode(
+                hmac.new(
+                    self._token_secret(), encoded_payload.encode(), hashlib.sha256
+                ).digest()
+            )
+            .decode()
+            .rstrip("=")
         )
         if not hmac.compare_digest(expected_signature, received_signature):
             return None
         try:
-            payload_bytes = base64.urlsafe_b64decode(encoded_payload + "=" * (-len(encoded_payload) % 4))
+            payload_bytes = base64.urlsafe_b64decode(
+                encoded_payload + "=" * (-len(encoded_payload) % 4)
+            )
             payload = json.loads(payload_bytes.decode())
         except (ValueError, json.JSONDecodeError):
             return None
@@ -213,7 +253,9 @@ class PdfDeliveryService:
         return session_id
 
     def _token_secret(self) -> bytes:
-        return (self.settings.pdf_delivery_token_secret or self.settings.legacy_auth_secret).encode()
+        return (
+            self.settings.pdf_delivery_token_secret or self.settings.legacy_auth_secret
+        ).encode()
 
 
 def map_twilio_message_status(status: str | None) -> str:
@@ -230,13 +272,26 @@ def map_twilio_message_status(status: str | None) -> str:
             return "failed"
 
 
-def should_apply_provider_status_transition(current_status: str, next_status: str) -> bool:
+def should_apply_provider_status_transition(
+    current_status: str, next_status: str
+) -> bool:
     if current_status == "failed" and next_status != "failed":
         return False
     if current_status == "read":
         return False
-    order = {"pending": 0, "processing": 1, "queued": 2, "sent": 3, "delivered": 4, "read": 5, "failed": 6}
-    return order.get(next_status, 0) >= order.get(current_status, 0) or next_status == "failed"
+    order = {
+        "pending": 0,
+        "processing": 1,
+        "queued": 2,
+        "sent": 3,
+        "delivered": 4,
+        "read": 5,
+        "failed": 6,
+    }
+    return (
+        order.get(next_status, 0) >= order.get(current_status, 0)
+        or next_status == "failed"
+    )
 
 
 def sanitize_public_media_file_name(file_name: str) -> str:

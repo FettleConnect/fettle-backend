@@ -4,7 +4,16 @@ import json
 import uuid
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 
 from api.app.transcribe.observability import ObservabilityService
 from api.app.transcribe.storage import LocalStorage
@@ -65,7 +74,9 @@ from api.app.transcribe.services.fettle_sync import FettleSyncService
 from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
 from api.app.transcribe.services.queue import QueueService
 from api.app.transcribe.services.sessions import SessionService
-from api.app.transcribe.services.transcription_provider import LocalTranscriptionProvider
+from api.app.transcribe.services.transcription_provider import (
+    LocalTranscriptionProvider,
+)
 
 router = APIRouter(tags=["transcribe"])
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
@@ -80,7 +91,9 @@ def _json_error_response(status_code: int, message: str) -> Response:
     )
 
 
-def _build_live_preview_segments(transcript_segments: list[dict], *, is_final: bool) -> list[dict]:
+def _build_live_preview_segments(
+    transcript_segments: list[dict], *, is_final: bool
+) -> list[dict]:
     return [
         {
             "id": str(uuid.uuid4()),
@@ -88,7 +101,9 @@ def _build_live_preview_segments(transcript_segments: list[dict], *, is_final: b
             "speakerLabel": segment.get("speakerLabel", "Speaker"),
             "text": segment.get("text", ""),
             "startedAtSeconds": segment.get("startedAtSeconds", 0),
-            "endedAtSeconds": segment.get("endedAtSeconds", segment.get("startedAtSeconds", 0)),
+            "endedAtSeconds": segment.get(
+                "endedAtSeconds", segment.get("startedAtSeconds", 0)
+            ),
             "isFinal": is_final,
         }
         for segment in transcript_segments
@@ -193,8 +208,12 @@ async def live_transcription_socket(
                         is_final=False,
                     )
                     started = True
-                    await websocket.send_json({"type": "ready", "liveSessionId": live_session_id})
-                    await websocket.send_json({"type": "preview", "segments": preview_segments})
+                    await websocket.send_json(
+                        {"type": "ready", "liveSessionId": live_session_id}
+                    )
+                    await websocket.send_json(
+                        {"type": "preview", "segments": preview_segments}
+                    )
                     continue
                 if not started:
                     continue
@@ -202,14 +221,24 @@ async def live_transcription_socket(
                     await websocket.send_json(
                         {
                             "type": "preview",
-                            "segments": [{**segment, "isFinal": True} for segment in preview_segments],
+                            "segments": [
+                                {**segment, "isFinal": True}
+                                for segment in preview_segments
+                            ],
                         }
                     )
                     continue
                 if msg_type in {"pause", "resume"}:
                     continue
-            if "bytes" in message and message["bytes"] is not None and started and preview_segments:
-                await websocket.send_json({"type": "preview", "segments": preview_segments})
+            if (
+                "bytes" in message
+                and message["bytes"] is not None
+                and started
+                and preview_segments
+            ):
+                await websocket.send_json(
+                    {"type": "preview", "segments": preview_segments}
+                )
     except WebSocketDisconnect:
         return
 
@@ -219,13 +248,20 @@ async def auth_me(doctor=Depends(require_doctor)) -> AuthMeResponse:
     return AuthMeResponse(doctor=doctor)
 
 
-@router.post("/sessions", response_model=CreateSessionResponse, status_code=201, tags=["sessions"])
+@router.post(
+    "/sessions",
+    response_model=CreateSessionResponse,
+    status_code=201,
+    tags=["sessions"],
+)
 async def create_session(
     request: CreateSessionRequest,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> CreateSessionResponse:
-    return CreateSessionResponse(session=await session_service.create_session(doctor.id, request))
+    return CreateSessionResponse(
+        session=await session_service.create_session(doctor.id, request)
+    )
 
 
 @router.get("/sessions", response_model=ListSessionsResponse, tags=["sessions"])
@@ -234,28 +270,44 @@ async def list_sessions(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> ListSessionsResponse:
-    return ListSessionsResponse(sessions=await session_service.list_sessions(doctor.id, search))
+    return ListSessionsResponse(
+        sessions=await session_service.list_sessions(doctor.id, search)
+    )
 
 
-@router.get("/sessions/{session_id}", response_model=GetSessionResponse, tags=["sessions"])
+@router.get(
+    "/sessions/{session_id}", response_model=GetSessionResponse, tags=["sessions"]
+)
 async def get_session(
     session_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GetSessionResponse:
-    return GetSessionResponse(session=await session_service.get_session(session_id, doctor.id))
+    return GetSessionResponse(
+        session=await session_service.get_session(session_id, doctor.id)
+    )
 
 
-@router.get("/sessions/{session_id}/patient-history", response_model=GetPatientHistoryResponse, tags=["sessions"])
+@router.get(
+    "/sessions/{session_id}/patient-history",
+    response_model=GetPatientHistoryResponse,
+    tags=["sessions"],
+)
 async def get_patient_history(
     session_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GetPatientHistoryResponse:
-    return GetPatientHistoryResponse(sessions=await session_service.get_patient_history(session_id, doctor.id))
+    return GetPatientHistoryResponse(
+        sessions=await session_service.get_patient_history(session_id, doctor.id)
+    )
 
 
-@router.get("/patients/profile-by-phone", response_model=GetPatientProfileByPhoneResponse, tags=["sessions"])
+@router.get(
+    "/patients/profile-by-phone",
+    response_model=GetPatientProfileByPhoneResponse,
+    tags=["sessions"],
+)
 async def get_patient_profile_by_phone(
     phone: str = Query(...),
     doctor=Depends(require_doctor),
@@ -265,17 +317,30 @@ async def get_patient_profile_by_phone(
     return GetPatientProfileByPhoneResponse(found=profile is not None, profile=profile)
 
 
-@router.patch("/sessions/{session_id}/case-status", response_model=GetSessionResponse, tags=["sessions"])
+@router.patch(
+    "/sessions/{session_id}/case-status",
+    response_model=GetSessionResponse,
+    tags=["sessions"],
+)
 async def update_case_status(
     session_id: str,
     request: UpdateCaseStatusRequest,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GetSessionResponse:
-    return GetSessionResponse(session=await session_service.update_case_status(session_id, doctor.id, request.caseStatus))
+    return GetSessionResponse(
+        session=await session_service.update_case_status(
+            session_id, doctor.id, request.caseStatus
+        )
+    )
 
 
-@router.post("/sessions/{session_id}/audio", response_model=UploadSessionAudioResponse, status_code=201, tags=["sessions"])
+@router.post(
+    "/sessions/{session_id}/audio",
+    response_model=UploadSessionAudioResponse,
+    status_code=201,
+    tags=["sessions"],
+)
 async def upload_session_audio(
     session_id: str,
     request: Request,
@@ -288,42 +353,63 @@ async def upload_session_audio(
         doctor.id,
         file_name=request.headers.get("x-audio-file-name"),
         mime_type=request.headers.get("content-type"),
-        duration_seconds=float(request.headers.get("x-audio-duration-seconds", "0") or 0),
+        duration_seconds=float(
+            request.headers.get("x-audio-duration-seconds", "0") or 0
+        ),
         data=data,
         storage=LocalStorage(),
     )
     return UploadSessionAudioResponse(session=session)
 
 
-@router.post("/sessions/{session_id}/transcription", response_model=SubmitSessionTranscriptionResponse, status_code=202, tags=["sessions"])
+@router.post(
+    "/sessions/{session_id}/transcription",
+    response_model=SubmitSessionTranscriptionResponse,
+    status_code=202,
+    tags=["sessions"],
+)
 async def submit_session_transcription(
     session_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
     x_idempotency_key: str | None = Header(default=None),
 ) -> SubmitSessionTranscriptionResponse:
-    session = await session_service.request_transcription(session_id, doctor.id, x_idempotency_key)
+    session = await session_service.request_transcription(
+        session_id, doctor.id, x_idempotency_key
+    )
     return SubmitSessionTranscriptionResponse(session=session)
 
 
-@router.put("/sessions/{session_id}/draft-document", response_model=UpdateDraftDocumentResponse, tags=["sessions"])
+@router.put(
+    "/sessions/{session_id}/draft-document",
+    response_model=UpdateDraftDocumentResponse,
+    tags=["sessions"],
+)
 async def update_draft_document(
     session_id: str,
     draft_document: DraftConsultationDocument,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> UpdateDraftDocumentResponse:
-    session = await session_service.update_draft_document(session_id, doctor.id, draft_document)
+    session = await session_service.update_draft_document(
+        session_id, doctor.id, draft_document
+    )
     return UpdateDraftDocumentResponse(session=session)
 
 
-@router.post("/sessions/{session_id}/pdf", response_model=GenerateSessionPdfResponse, tags=["sessions"])
+@router.post(
+    "/sessions/{session_id}/pdf",
+    response_model=GenerateSessionPdfResponse,
+    tags=["sessions"],
+)
 async def generate_session_pdf(
     session_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GenerateSessionPdfResponse:
-    session = await session_service.generate_session_pdf(session_id, doctor.id, LocalStorage())
+    session = await session_service.generate_session_pdf(
+        session_id, doctor.id, LocalStorage()
+    )
     return GenerateSessionPdfResponse(session=session)
 
 
@@ -333,11 +419,16 @@ async def get_transcript_artifact(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_transcript_download(session_id, doctor.id)
+    file_name, mime_type, data = await session_service.get_transcript_download(
+        session_id, doctor.id
+    )
     return Response(
         content=data,
         media_type=mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"', "Cache-Control": "no-store"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -347,11 +438,16 @@ async def get_audio_artifact(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_audio_download(session_id, doctor.id, LocalStorage())
+    file_name, mime_type, data = await session_service.get_audio_download(
+        session_id, doctor.id, LocalStorage()
+    )
     return Response(
         content=data,
         media_type=mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"', "Cache-Control": "no-store"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -361,11 +457,16 @@ async def get_pdf_artifact(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_pdf_download(session_id, doctor.id, LocalStorage())
+    file_name, mime_type, data = await session_service.get_pdf_download(
+        session_id, doctor.id, LocalStorage()
+    )
     return Response(
         content=data,
         media_type=mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"', "Cache-Control": "no-store"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -406,7 +507,11 @@ async def list_report_context_uploads(
     return ListReportContextUploadsResponse(uploads=uploads)
 
 
-@router.delete("/sessions/{session_id}/report-context/uploads/{upload_id}", status_code=204, tags=["report-context"])
+@router.delete(
+    "/sessions/{session_id}/report-context/uploads/{upload_id}",
+    status_code=204,
+    tags=["report-context"],
+)
 async def delete_report_context_upload(
     session_id: str,
     upload_id: str,
@@ -417,18 +522,23 @@ async def delete_report_context_upload(
     return Response(status_code=204)
 
 
-@router.get("/sessions/{session_id}/report-context/uploads/{upload_id}/content", tags=["report-context"])
+@router.get(
+    "/sessions/{session_id}/report-context/uploads/{upload_id}/content",
+    tags=["report-context"],
+)
 async def get_report_context_upload_content(
     session_id: str,
     upload_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_report_context_upload_content(
-        session_id,
-        upload_id,
-        doctor.id,
-        LocalStorage(),
+    file_name, mime_type, data = (
+        await session_service.get_report_context_upload_content(
+            session_id,
+            upload_id,
+            doctor.id,
+            LocalStorage(),
+        )
     )
     return Response(
         content=data,
@@ -453,7 +563,9 @@ async def extract_report_context(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> ExtractReportContextResponse:
-    session = await session_service.extract_report_context(session_id, request.uploadIds, doctor.id)
+    session = await session_service.extract_report_context(
+        session_id, request.uploadIds, doctor.id
+    )
     return ExtractReportContextResponse(session=session)
 
 
@@ -469,7 +581,9 @@ async def start_report_context_extraction_job(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> CreateReportContextExtractionJobResponse:
-    job = await session_service.start_report_context_extraction_job(session_id, request.uploadIds, doctor.id)
+    job = await session_service.start_report_context_extraction_job(
+        session_id, request.uploadIds, doctor.id
+    )
     return CreateReportContextExtractionJobResponse(job=job)
 
 
@@ -506,16 +620,25 @@ async def get_report_context_extraction_job(
     return GetReportContextExtractionJobResponse(job=job)
 
 
-@router.get("/sessions/{session_id}/report-context/jobs/{job_id}/stream", tags=["report-context"])
+@router.get(
+    "/sessions/{session_id}/report-context/jobs/{job_id}/stream",
+    tags=["report-context"],
+)
 async def stream_report_context_extraction_job(
     session_id: str,
     job_id: str,
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    job = await session_service.get_report_context_extraction_job(session_id, job_id, doctor.id)
+    job = await session_service.get_report_context_extraction_job(
+        session_id, job_id, doctor.id
+    )
     payload = f"retry: 2000\n\nevent: job\ndata: {job.model_dump_json()}\n\n"
-    return Response(content=payload, media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform"})
+    return Response(
+        content=payload,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform"},
+    )
 
 
 @router.post(
@@ -529,11 +652,15 @@ async def cancel_report_context_extraction_job(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GetReportContextExtractionJobResponse:
-    job = await session_service.cancel_report_context_extraction_job(session_id, job_id, doctor.id)
+    job = await session_service.cancel_report_context_extraction_job(
+        session_id, job_id, doctor.id
+    )
     return GetReportContextExtractionJobResponse(job=job)
 
 
-@router.post("/sessions/{session_id}/report-context/suggestions", tags=["report-context"])
+@router.post(
+    "/sessions/{session_id}/report-context/suggestions", tags=["report-context"]
+)
 async def suggest_report_context_draft(
     session_id: str,
     request: Request,
@@ -549,7 +676,11 @@ async def suggest_report_context_draft(
     )
 
 
-@router.post("/sessions/{session_id}/report-context/apply", response_model=GetSessionResponse, tags=["report-context"])
+@router.post(
+    "/sessions/{session_id}/report-context/apply",
+    response_model=GetSessionResponse,
+    tags=["report-context"],
+)
 async def apply_report_context_draft(
     session_id: str,
     request: Request,
@@ -557,7 +688,9 @@ async def apply_report_context_draft(
     session_service: SessionService = Depends(get_session_service),
 ) -> GetSessionResponse:
     body = await request.json()
-    draft_document = DraftConsultationDocument.model_validate(body.get("draftDocument", {}))
+    draft_document = DraftConsultationDocument.model_validate(
+        body.get("draftDocument", {})
+    )
     session = await session_service.apply_report_context_draft(
         session_id,
         body.get("chunkIds", []),
@@ -568,12 +701,18 @@ async def apply_report_context_draft(
     return GetSessionResponse(session=session)
 
 
-@router.get("/public/intake/{token}", response_model=GetPublicIntakeLinkResponse, tags=["public-intake"])
+@router.get(
+    "/public/intake/{token}",
+    response_model=GetPublicIntakeLinkResponse,
+    tags=["public-intake"],
+)
 async def get_public_intake_link(
     token: str,
     queue_service: QueueService = Depends(get_queue_service),
 ) -> GetPublicIntakeLinkResponse:
-    return GetPublicIntakeLinkResponse(intakeLink=await queue_service.get_public_intake_link(token))
+    return GetPublicIntakeLinkResponse(
+        intakeLink=await queue_service.get_public_intake_link(token)
+    )
 
 
 @router.get(
@@ -601,18 +740,27 @@ async def get_public_intake_link_by_slug(
     auth_service: AuthService = Depends(get_auth_service),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> GetPublicIntakeLinkResponse:
-    doctor = await auth_service.get_doctor_by_public_path(department_slug, doctor_name_slug)
+    doctor = await auth_service.get_doctor_by_public_path(
+        department_slug, doctor_name_slug
+    )
     intake_link = await queue_service.get_doctor_intake_link(doctor)
     return GetPublicIntakeLinkResponse(intakeLink=intake_link)
 
 
-@router.post("/public/intake/{token}", response_model=SubmitPublicIntakeResponse, status_code=201, tags=["public-intake"])
+@router.post(
+    "/public/intake/{token}",
+    response_model=SubmitPublicIntakeResponse,
+    status_code=201,
+    tags=["public-intake"],
+)
 async def submit_public_intake(
     token: str,
     request: SubmitPublicIntakeRequest,
     queue_service: QueueService = Depends(get_queue_service),
 ) -> SubmitPublicIntakeResponse:
-    return SubmitPublicIntakeResponse(entry=await queue_service.submit_public_intake(token, request))
+    return SubmitPublicIntakeResponse(
+        entry=await queue_service.submit_public_intake(token, request)
+    )
 
 
 @router.get("/intake-link", response_model=GetDoctorIntakeLinkResponse, tags=["queue"])
@@ -620,7 +768,9 @@ async def get_doctor_intake_link(
     doctor=Depends(require_doctor),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> GetDoctorIntakeLinkResponse:
-    return GetDoctorIntakeLinkResponse(intakeLink=await queue_service.get_doctor_intake_link(doctor))
+    return GetDoctorIntakeLinkResponse(
+        intakeLink=await queue_service.get_doctor_intake_link(doctor)
+    )
 
 
 @router.get("/queue", response_model=QueueListResponse, tags=["queue"])
@@ -631,7 +781,12 @@ async def list_queue_entries(
     return QueueListResponse(entries=await queue_service.list_queue_entries(doctor.id))
 
 
-@router.post("/queue/{queue_entry_id}/accept", response_model=AcceptQueueEntryResponse, status_code=201, tags=["queue"])
+@router.post(
+    "/queue/{queue_entry_id}/accept",
+    response_model=AcceptQueueEntryResponse,
+    status_code=201,
+    tags=["queue"],
+)
 async def accept_queue_entry(
     queue_entry_id: str,
     doctor=Depends(require_doctor),
@@ -641,22 +796,34 @@ async def accept_queue_entry(
     return AcceptQueueEntryResponse(entry=entry, session=session)
 
 
-@router.post("/queue/{queue_entry_id}/no-show", response_model=UpdateQueueEntryResponse, tags=["queue"])
+@router.post(
+    "/queue/{queue_entry_id}/no-show",
+    response_model=UpdateQueueEntryResponse,
+    tags=["queue"],
+)
 async def mark_queue_entry_no_show(
     queue_entry_id: str,
     doctor=Depends(require_doctor),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> UpdateQueueEntryResponse:
-    return UpdateQueueEntryResponse(entry=await queue_service.mark_queue_entry_no_show(queue_entry_id, doctor))
+    return UpdateQueueEntryResponse(
+        entry=await queue_service.mark_queue_entry_no_show(queue_entry_id, doctor)
+    )
 
 
-@router.post("/queue/{queue_entry_id}/cancel", response_model=UpdateQueueEntryResponse, tags=["queue"])
+@router.post(
+    "/queue/{queue_entry_id}/cancel",
+    response_model=UpdateQueueEntryResponse,
+    tags=["queue"],
+)
 async def cancel_queue_entry(
     queue_entry_id: str,
     doctor=Depends(require_doctor),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> UpdateQueueEntryResponse:
-    return UpdateQueueEntryResponse(entry=await queue_service.cancel_queue_entry(queue_entry_id, doctor))
+    return UpdateQueueEntryResponse(
+        entry=await queue_service.cancel_queue_entry(queue_entry_id, doctor)
+    )
 
 
 @router.get("/internal/admin/doctors", tags=["internal-admin"])
@@ -720,7 +887,9 @@ async def admin_reset_doctor_pin(
     return await auth_service.reset_doctor_pin(doctor_id)
 
 
-@router.post("/internal/admin/doctors/{doctor_id}/pin-lock/clear", tags=["internal-admin"])
+@router.post(
+    "/internal/admin/doctors/{doctor_id}/pin-lock/clear", tags=["internal-admin"]
+)
 async def admin_clear_doctor_pin_lock(
     doctor_id: str,
     _admin=Depends(require_internal_admin),
@@ -744,7 +913,11 @@ async def admin_get_intake_link(
     _admin=Depends(require_internal_admin),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> dict[str, object]:
-    return {"intakeLink": await queue_service.get_intake_link_by_id_for_admin(intake_link_id)}
+    return {
+        "intakeLink": await queue_service.get_intake_link_by_id_for_admin(
+            intake_link_id
+        )
+    }
 
 
 @router.patch("/internal/admin/intake-links/{intake_link_id}", tags=["internal-admin"])
@@ -787,10 +960,16 @@ async def admin_get_queue_entry(
     _admin=Depends(require_internal_admin),
     queue_service: QueueService = Depends(get_queue_service),
 ) -> dict[str, object]:
-    return {"entry": await queue_service.get_queue_entry_by_id_for_admin(queue_entry_id)}
+    return {
+        "entry": await queue_service.get_queue_entry_by_id_for_admin(queue_entry_id)
+    }
 
 
-@router.post("/internal/admin/queue/{queue_entry_id}/accept", status_code=201, tags=["internal-admin"])
+@router.post(
+    "/internal/admin/queue/{queue_entry_id}/accept",
+    status_code=201,
+    tags=["internal-admin"],
+)
 async def admin_accept_queue_entry(
     queue_entry_id: str,
     _admin=Depends(require_internal_admin),
@@ -799,7 +978,9 @@ async def admin_accept_queue_entry(
 ) -> dict[str, object]:
     entry = await queue_service.get_queue_entry_by_id_for_admin(queue_entry_id)
     doctor = await auth_service.get_doctor_by_id(entry.doctorId)
-    accepted_entry, session = await queue_service.accept_queue_entry(queue_entry_id, doctor)
+    accepted_entry, session = await queue_service.accept_queue_entry(
+        queue_entry_id, doctor
+    )
     return {"entry": accepted_entry, "session": session}
 
 
@@ -812,7 +993,9 @@ async def admin_mark_queue_entry_no_show(
 ) -> dict[str, object]:
     entry = await queue_service.get_queue_entry_by_id_for_admin(queue_entry_id)
     doctor = await auth_service.get_doctor_by_id(entry.doctorId)
-    return {"entry": await queue_service.mark_queue_entry_no_show(queue_entry_id, doctor)}
+    return {
+        "entry": await queue_service.mark_queue_entry_no_show(queue_entry_id, doctor)
+    }
 
 
 @router.post("/internal/admin/queue/{queue_entry_id}/cancel", tags=["internal-admin"])
@@ -838,9 +1021,18 @@ async def admin_list_sessions(
 ) -> dict[str, object]:
     sessions = await session_service.list_sessions_admin(doctorId, search)
     if transcriptionStatus is not None:
-        sessions = [session for session in sessions if session.transcription and session.transcription.status == transcriptionStatus]
+        sessions = [
+            session
+            for session in sessions
+            if session.transcription
+            and session.transcription.status == transcriptionStatus
+        ]
     if hasDocument is not None:
-        sessions = [session for session in sessions if (session.documentArtifact is not None) is hasDocument]
+        sessions = [
+            session
+            for session in sessions
+            if (session.documentArtifact is not None) is hasDocument
+        ]
     return {"sessions": sessions}
 
 
@@ -875,7 +1067,9 @@ async def admin_get_session(
     return {"session": await session_service.get_session_any(session_id)}
 
 
-@router.get("/internal/admin/sessions/{session_id}/transcription", tags=["internal-admin"])
+@router.get(
+    "/internal/admin/sessions/{session_id}/transcription", tags=["internal-admin"]
+)
 async def admin_get_session_transcription(
     session_id: str,
     _admin=Depends(require_internal_admin),
@@ -885,7 +1079,9 @@ async def admin_get_session_transcription(
     return {"transcription": session.transcription}
 
 
-@router.put("/internal/admin/sessions/{session_id}/draft-document", tags=["internal-admin"])
+@router.put(
+    "/internal/admin/sessions/{session_id}/draft-document", tags=["internal-admin"]
+)
 async def admin_update_draft_document(
     session_id: str,
     request: DraftConsultationDocument,
@@ -893,18 +1089,26 @@ async def admin_update_draft_document(
     session_service: SessionService = Depends(get_session_service),
 ) -> dict[str, object]:
     session = await session_service.get_session_any(session_id)
-    updated = await session_service.update_draft_document(session_id, session.doctorId, request)
+    updated = await session_service.update_draft_document(
+        session_id, session.doctorId, request
+    )
     return {"session": updated}
 
 
-@router.post("/internal/admin/sessions/{session_id}/transcription", status_code=202, tags=["internal-admin"])
+@router.post(
+    "/internal/admin/sessions/{session_id}/transcription",
+    status_code=202,
+    tags=["internal-admin"],
+)
 async def admin_request_transcription(
     session_id: str,
     _admin=Depends(require_internal_admin),
     session_service: SessionService = Depends(get_session_service),
     x_idempotency_key: str | None = Header(default=None),
 ) -> dict[str, object]:
-    session = await session_service.request_transcription_admin(session_id, x_idempotency_key)
+    session = await session_service.request_transcription_admin(
+        session_id, x_idempotency_key
+    )
     return {"session": session}
 
 
@@ -914,38 +1118,65 @@ async def admin_generate_pdf(
     _admin=Depends(require_internal_admin),
     session_service: SessionService = Depends(get_session_service),
 ) -> dict[str, object]:
-    session = await session_service.generate_session_pdf_admin(session_id, LocalStorage())
+    session = await session_service.generate_session_pdf_admin(
+        session_id, LocalStorage()
+    )
     return {"session": session}
 
 
-@router.get("/internal/admin/sessions/{session_id}/artifacts/transcript", tags=["internal-admin"])
+@router.get(
+    "/internal/admin/sessions/{session_id}/artifacts/transcript",
+    tags=["internal-admin"],
+)
 async def admin_get_transcript_artifact(
     session_id: str,
     _admin=Depends(require_internal_admin),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_transcript_download_admin(session_id)
-    return Response(content=data, media_type=mime_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+    file_name, mime_type, data = await session_service.get_transcript_download_admin(
+        session_id
+    )
+    return Response(
+        content=data,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
 
 
-@router.get("/internal/admin/sessions/{session_id}/artifacts/audio", tags=["internal-admin"])
+@router.get(
+    "/internal/admin/sessions/{session_id}/artifacts/audio", tags=["internal-admin"]
+)
 async def admin_get_audio_artifact(
     session_id: str,
     _admin=Depends(require_internal_admin),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_audio_download_admin(session_id, LocalStorage())
-    return Response(content=data, media_type=mime_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+    file_name, mime_type, data = await session_service.get_audio_download_admin(
+        session_id, LocalStorage()
+    )
+    return Response(
+        content=data,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
 
 
-@router.get("/internal/admin/sessions/{session_id}/artifacts/pdf", tags=["internal-admin"])
+@router.get(
+    "/internal/admin/sessions/{session_id}/artifacts/pdf", tags=["internal-admin"]
+)
 async def admin_get_pdf_artifact(
     session_id: str,
     _admin=Depends(require_internal_admin),
     session_service: SessionService = Depends(get_session_service),
 ) -> Response:
-    file_name, mime_type, data = await session_service.get_pdf_download_admin(session_id, LocalStorage())
-    return Response(content=data, media_type=mime_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+    file_name, mime_type, data = await session_service.get_pdf_download_admin(
+        session_id, LocalStorage()
+    )
+    return Response(
+        content=data,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
 
 
 @router.get("/internal/admin/fettle-sync/stats", tags=["internal-admin"])
@@ -966,7 +1197,12 @@ async def admin_fettle_sync_jobs(
     return {"jobs": await fettle_sync_service.list_jobs(status=status, limit=limit)}
 
 
-@router.post("/internal/admin/fettle-sync/dry-run", status_code=202, response_model=None, tags=["internal-admin"])
+@router.post(
+    "/internal/admin/fettle-sync/dry-run",
+    status_code=202,
+    response_model=None,
+    tags=["internal-admin"],
+)
 async def admin_fettle_sync_dry_run(
     _admin=Depends(require_internal_admin),
     fettle_sync_service: FettleSyncService = Depends(get_fettle_sync_service),
@@ -978,7 +1214,11 @@ async def admin_fettle_sync_dry_run(
     return {"job": job, "result": result}
 
 
-@router.post("/internal/admin/fettle-sync/jobs/{job_id}/replay", response_model=None, tags=["internal-admin"])
+@router.post(
+    "/internal/admin/fettle-sync/jobs/{job_id}/replay",
+    response_model=None,
+    tags=["internal-admin"],
+)
 async def admin_fettle_sync_replay(
     job_id: str,
     _admin=Depends(require_internal_admin),
@@ -1019,7 +1259,11 @@ async def public_kpi_scorecard(
     observability_service: ObservabilityService = Depends(get_observability_service),
 ) -> dict:
     focus_mode = str(focus or "").strip().lower() in {"1", "true", "yes"}
-    include_expected = str(includeExpected or "").strip().lower() in {"1", "true", "yes"}
+    include_expected = str(includeExpected or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     filter_today = str(today or "").strip().lower() in {"1", "true", "yes"}
     selected_window = window or ("today" if filter_today else None)
     return await observability_service.get_scorecard(
@@ -1037,7 +1281,9 @@ async def public_kpi_providers(
     window: str | None = Query(default=None),
     observability_service: ObservabilityService = Depends(get_observability_service),
 ) -> dict:
-    return await observability_service.get_provider_diagnostics(window=window or "today")
+    return await observability_service.get_provider_diagnostics(
+        window=window or "today"
+    )
 
 
 @router.get("/public/kpi/pipeline", tags=["kpi"])
@@ -1045,7 +1291,9 @@ async def public_kpi_pipeline(
     window: str | None = Query(default=None),
     observability_service: ObservabilityService = Depends(get_observability_service),
 ) -> dict:
-    return await observability_service.get_pipeline_diagnostics(window=window or "today")
+    return await observability_service.get_pipeline_diagnostics(
+        window=window or "today"
+    )
 
 
 @router.get("/public/kpi/report-context-fallback", tags=["kpi"])
@@ -1053,7 +1301,9 @@ async def public_kpi_report_context_fallback(
     window: str | None = Query(default=None),
     observability_service: ObservabilityService = Depends(get_observability_service),
 ) -> dict:
-    return await observability_service.get_report_context_fallback_diagnostics(window=window or "today")
+    return await observability_service.get_report_context_fallback_diagnostics(
+        window=window or "today"
+    )
 
 
 @router.get("/public/kpi/event-trends", tags=["kpi"])
@@ -1079,7 +1329,9 @@ async def prepare_pdf_delivery(
     doctor=Depends(require_doctor),
     pdf_delivery_service: PdfDeliveryService = Depends(get_pdf_delivery_service),
 ) -> dict[str, object]:
-    delivery = await pdf_delivery_service.prepare_session_delivery(session_id, await request.json(), doctor.id)
+    delivery = await pdf_delivery_service.prepare_session_delivery(
+        session_id, await request.json(), doctor.id
+    )
     return {"delivery": delivery}
 
 
@@ -1089,7 +1341,9 @@ async def get_pdf_delivery_status(
     doctor=Depends(require_doctor),
     pdf_delivery_service: PdfDeliveryService = Depends(get_pdf_delivery_service),
 ) -> dict[str, object]:
-    delivery = await pdf_delivery_service.get_session_delivery_status(session_id, doctor.id)
+    delivery = await pdf_delivery_service.get_session_delivery_status(
+        session_id, doctor.id
+    )
     return {"delivery": delivery}
 
 
@@ -1100,22 +1354,30 @@ async def send_pdf_delivery(
     doctor=Depends(require_doctor),
     pdf_delivery_service: PdfDeliveryService = Depends(get_pdf_delivery_service),
 ) -> dict[str, object]:
-    delivery = await pdf_delivery_service.send_session_delivery(session_id, await request.json(), doctor.id)
+    delivery = await pdf_delivery_service.send_session_delivery(
+        session_id, await request.json(), doctor.id
+    )
     return {"delivery": delivery}
 
 
-@router.put("/internal/admin/sessions/{session_id}/pdf-delivery", tags=["internal-admin"])
+@router.put(
+    "/internal/admin/sessions/{session_id}/pdf-delivery", tags=["internal-admin"]
+)
 async def admin_prepare_pdf_delivery(
     session_id: str,
     request: Request,
     _admin=Depends(require_internal_admin),
     pdf_delivery_service: PdfDeliveryService = Depends(get_pdf_delivery_service),
 ) -> dict[str, object]:
-    delivery = await pdf_delivery_service.prepare_session_delivery(session_id, await request.json())
+    delivery = await pdf_delivery_service.prepare_session_delivery(
+        session_id, await request.json()
+    )
     return {"delivery": delivery}
 
 
-@router.get("/internal/admin/sessions/{session_id}/pdf-delivery", tags=["internal-admin"])
+@router.get(
+    "/internal/admin/sessions/{session_id}/pdf-delivery", tags=["internal-admin"]
+)
 async def admin_get_pdf_delivery_status(
     session_id: str,
     _admin=Depends(require_internal_admin),
@@ -1125,14 +1387,18 @@ async def admin_get_pdf_delivery_status(
     return {"delivery": delivery}
 
 
-@router.post("/internal/admin/sessions/{session_id}/pdf-delivery/send", tags=["internal-admin"])
+@router.post(
+    "/internal/admin/sessions/{session_id}/pdf-delivery/send", tags=["internal-admin"]
+)
 async def admin_send_pdf_delivery(
     session_id: str,
     request: Request,
     _admin=Depends(require_internal_admin),
     pdf_delivery_service: PdfDeliveryService = Depends(get_pdf_delivery_service),
 ) -> dict[str, object]:
-    delivery = await pdf_delivery_service.send_session_delivery(session_id, await request.json())
+    delivery = await pdf_delivery_service.send_session_delivery(
+        session_id, await request.json()
+    )
     return {"delivery": delivery}
 
 
@@ -1153,7 +1419,11 @@ async def admin_pdf_delivery_jobs(
     }
 
 
-@router.get("/internal/admin/pdf-delivery/jobs/{job_id}", response_model=None, tags=["internal-admin"])
+@router.get(
+    "/internal/admin/pdf-delivery/jobs/{job_id}",
+    response_model=None,
+    tags=["internal-admin"],
+)
 async def admin_pdf_delivery_job(
     job_id: str,
     _admin=Depends(require_internal_admin),
@@ -1161,7 +1431,11 @@ async def admin_pdf_delivery_job(
 ) -> dict[str, object] | Response:
     job = await pdf_delivery_service.get_job_by_id_for_admin(job_id)
     if job is None:
-        return Response(status_code=404, content='{"error":"PDF delivery job was not found."}', media_type="application/json")
+        return Response(
+            status_code=404,
+            content='{"error":"PDF delivery job was not found."}',
+            media_type="application/json",
+        )
     return {"job": job}
 
 

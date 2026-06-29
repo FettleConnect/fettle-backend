@@ -37,7 +37,9 @@ class QueueEntry(BaseModel):
     intakeLinkId: str
     intakeLabel: str
     patient: QueuePatient
-    status: Literal["waiting", "accepted", "in_consultation", "completed", "cancelled", "no_show"]
+    status: Literal[
+        "waiting", "accepted", "in_consultation", "completed", "cancelled", "no_show"
+    ]
     source: Literal["qr", "manual", "import"] = "qr"
     submittedAt: datetime
     acceptedAt: datetime | None = None

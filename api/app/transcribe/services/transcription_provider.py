@@ -10,7 +10,12 @@ class LocalTranscriptionProvider:
     provider_name = "mock-gemini"
 
     async def transcribe(self, session: ConsultationSession) -> dict[str, Any]:
-        duration = max(30, round(session.audioArtifact.durationSeconds if session.audioArtifact else 90))
+        duration = max(
+            30,
+            round(
+                session.audioArtifact.durationSeconds if session.audioArtifact else 90
+            ),
+        )
         midpoint = max(12, round(duration / 2))
         doctor_label = "Doctor"
         patient_label = session.patient.name or "Patient"
@@ -75,7 +80,10 @@ class LocalTranscriptionProvider:
                     },
                 ],
                 "testsPrescribed": [{"name": "CBC"}],
-                "nextSteps": ["Continue hydration and rest.", "Return for review if symptoms worsen."],
+                "nextSteps": [
+                    "Continue hydration and rest.",
+                    "Return for review if symptoms worsen.",
+                ],
                 "cautions": ["Seek urgent help if shortness of breath develops."],
             },
         }

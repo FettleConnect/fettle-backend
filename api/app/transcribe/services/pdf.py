@@ -4,7 +4,11 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from api.app.transcribe.schemas.common import ConsultationSession, DocumentArtifact, DocumentArtifactDelivery
+from api.app.transcribe.schemas.common import (
+    ConsultationSession,
+    DocumentArtifact,
+    DocumentArtifactDelivery,
+)
 from api.app.transcribe.schemas.sessions import DraftConsultationDocument
 
 
@@ -30,8 +34,14 @@ def build_minimal_pdf(lines: list[str]) -> bytes:
     objects.append(
         b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n"
     )
-    objects.append(b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
-    objects.append(f"5 0 obj << /Length {len(stream)} >> stream\n".encode() + stream + b"\nendstream endobj\n")
+    objects.append(
+        b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n"
+    )
+    objects.append(
+        f"5 0 obj << /Length {len(stream)} >> stream\n".encode()
+        + stream
+        + b"\nendstream endobj\n"
+    )
 
     pdf = bytearray(b"%PDF-1.4\n")
     offsets = [0]
@@ -43,7 +53,9 @@ def build_minimal_pdf(lines: list[str]) -> bytes:
     pdf.extend(b"0000000000 65535 f \n")
     for offset in offsets[1:]:
         pdf.extend(f"{offset:010d} 00000 n \n".encode())
-    pdf.extend(f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode())
+    pdf.extend(
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode()
+    )
     return bytes(pdf)
 
 
@@ -52,9 +64,13 @@ def _slugify(value: str) -> str:
     return normalized.strip("-") or "consultation"
 
 
-def build_document_artifact(session: ConsultationSession, draft: DraftConsultationDocument) -> tuple[DocumentArtifact, bytes]:
+def build_document_artifact(
+    session: ConsultationSession, draft: DraftConsultationDocument
+) -> tuple[DocumentArtifact, bytes]:
     created_at = datetime.now(UTC)
-    file_name = f"{_slugify(session.patient.name)}-{created_at.strftime('%Y%m%d-%H%M%S')}.pdf"
+    file_name = (
+        f"{_slugify(session.patient.name)}-{created_at.strftime('%Y%m%d-%H%M%S')}.pdf"
+    )
     lines = [
         draft.title or "Consultation Summary",
         f"Patient: {session.patient.name}",
@@ -82,7 +98,11 @@ def build_transcript_pdf(session: ConsultationSession) -> bytes:
     transcription = session.transcription
     lines = [
         f"Transcript for {session.patient.name}",
-        transcription.summary if transcription and transcription.summary else "Transcript summary unavailable.",
+        (
+            transcription.summary
+            if transcription and transcription.summary
+            else "Transcript summary unavailable."
+        ),
     ]
     if transcription:
         for segment in transcription.transcriptSegments:

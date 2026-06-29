@@ -36,7 +36,9 @@ def get_session_service(
 def get_queue_service(
     db_session: AsyncSession = Depends(get_db_session),
 ) -> QueueService:
-    return QueueService(SqlQueueRepository(db_session), SqlSessionRepository(db_session))
+    return QueueService(
+        SqlQueueRepository(db_session), SqlSessionRepository(db_session)
+    )
 
 
 def get_observability_service(
@@ -64,7 +66,10 @@ async def require_doctor(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail=ErrorResponse(message="Authentication required.").model_dump())
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(message="Authentication required.").model_dump(),
+        )
     token = authorization.removeprefix("Bearer ").strip()
     return (await auth_service.current_doctor(token)).doctor
 
@@ -79,12 +84,25 @@ def require_internal_admin(
 ) -> dict[str, str]:
     bearer_token = None
     if authorization and authorization.lower().startswith("bearer "):
-        bearer_token = authorization.removeprefix("Bearer ").removeprefix("bearer ").strip()
+        bearer_token = (
+            authorization.removeprefix("Bearer ").removeprefix("bearer ").strip()
+        )
     credential = x_internal_api_key or bearer_token
-    if not settings.internal_api_enabled or not credential or credential != settings.internal_api_key:
-        raise HTTPException(status_code=401, detail=ErrorResponse(message="Internal admin authentication required.").model_dump())
+    if (
+        not settings.internal_api_enabled
+        or not credential
+        or credential != settings.internal_api_key
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(
+                message="Internal admin authentication required."
+            ).model_dump(),
+        )
     actor = {
-        "authenticationMethod": "x-internal-api-key" if x_internal_api_key else "authorization",
+        "authenticationMethod": (
+            "x-internal-api-key" if x_internal_api_key else "authorization"
+        ),
         "caller": x_internal_caller or "internal-admin",
     }
     if x_admin_user_id:
