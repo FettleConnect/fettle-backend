@@ -111,58 +111,28 @@ def upgrade() -> None:
         "ix_kpi_events_created_at", "kpi_events", ["created_at"], unique=False
     )
 
-    op.create_table(
-        "transcribe_doctors",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("workspace_id", sa.Integer(), nullable=True),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("department", sa.String(length=255), nullable=True),
-        sa.Column("department_slug", sa.String(length=255), nullable=False),
-        sa.Column("doctor_name_slug", sa.String(length=255), nullable=False),
-        sa.Column("phone_number", sa.String(length=32), nullable=True),
-        sa.Column("email", sa.String(length=320), nullable=True),
+    op.add_column(
+        "users",
+        sa.Column("legacy_pin_code", sa.String(length=16), nullable=True),
+    )
+    op.add_column(
+        "users",
         sa.Column(
-            "last_login_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
+            "legacy_token_version", sa.Integer(), nullable=False, server_default="0"
         ),
-        sa.Column(
-            "pin_code", sa.String(length=16), nullable=False, server_default="123456"
-        ),
-        sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "users",
         sa.Column(
             "must_change_pin",
             sa.Boolean(),
             nullable=False,
             server_default=sa.text("false"),
         ),
-        sa.Column(
-            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
-        ),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.UniqueConstraint(
-            "department_slug",
-            "doctor_name_slug",
-            name="uq_transcribe_doctor_public_slug",
-        ),
     )
-    op.create_index(
-        "ix_transcribe_doctors_department_slug",
-        "transcribe_doctors",
-        ["department_slug"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_transcribe_doctors_doctor_name_slug",
-        "transcribe_doctors",
-        ["doctor_name_slug"],
-        unique=False,
+    op.add_column(
+        "users",
+        sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
     )
 
     op.create_table(
@@ -170,8 +140,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
             "doctor_id",
-            sa.Integer(),
-            sa.ForeignKey("transcribe_doctors.id", ondelete="CASCADE"),
+            sa.Uuid(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
@@ -209,8 +179,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
             "doctor_id",
-            sa.Integer(),
-            sa.ForeignKey("transcribe_doctors.id", ondelete="CASCADE"),
+            sa.Uuid(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("patient_name", sa.String(length=255), nullable=True),
@@ -586,8 +556,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
             "doctor_id",
-            sa.Integer(),
-            sa.ForeignKey("transcribe_doctors.id", ondelete="CASCADE"),
+            sa.Uuid(),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
@@ -855,13 +825,10 @@ def downgrade() -> None:
     )
     op.drop_table("transcribe_intake_links")
 
-    op.drop_index(
-        "ix_transcribe_doctors_doctor_name_slug", table_name="transcribe_doctors"
-    )
-    op.drop_index(
-        "ix_transcribe_doctors_department_slug", table_name="transcribe_doctors"
-    )
-    op.drop_table("transcribe_doctors")
+    op.drop_column("users", "last_login_at")
+    op.drop_column("users", "must_change_pin")
+    op.drop_column("users", "legacy_token_version")
+    op.drop_column("users", "legacy_pin_code")
 
     op.drop_index("ix_kpi_events_created_at", table_name="kpi_events")
     op.drop_index("ix_kpi_events_section", table_name="kpi_events")

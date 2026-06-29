@@ -26,7 +26,7 @@ from api.app.views.v1.hospital.outbound_dashboard import router as outbound_dash
 from api.app.views.v1.hospital.patients import router as patients_router
 from api.app.views.v1.hospital.webhooks import router as webhooks_router
 from api.app.views.v1.tenant import router as tenant_router
-from fettle_backend.products.transcribe.api.router import (
+from api.app.transcribe.api.router import (
     router as pwa_transcribe_router,
 )
 

@@ -6,8 +6,8 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from fettle_backend.app.config import get_settings
-from fettle_backend.app.main import create_app
+from api.app.core.config import get_settings
+from api.app.main import app
 
 
 def _auth_headers(client):
@@ -27,7 +27,7 @@ def internal_admin_client(client, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("INTERNAL_API_ENABLED", "true")
     monkeypatch.setenv("INTERNAL_API_KEY", "test-internal-key")
     get_settings.cache_clear()
-    with TestClient(create_app()) as admin_client:
+    with TestClient(app) as admin_client:
         yield admin_client
     get_settings.cache_clear()
 

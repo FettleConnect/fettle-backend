@@ -6,8 +6,7 @@ This is the phase-1 compatibility inventory for the migrated `Transcribe` backen
 
 | Route | Status | Notes |
 | --- | --- | --- |
-| `GET /health` | `preserve` | Implemented with source-compatible health payload and local mock-mode flag |
-| `GET /internal/health` | `preserve` | Implemented with internal API authentication and actor metadata |
+| `GET /health` | `preserve` | Implemented on the existing backend health surface |
 
 ## Auth
 

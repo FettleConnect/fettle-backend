@@ -20,8 +20,6 @@ COPY --chown=app:app api/alembic ./alembic
 
 # Copy application code
 COPY --chown=app:app api/app ./app
-COPY --chown=app:app src ./src
-COPY --chown=app:app fettle_backend ./fettle_backend
 
 # Create 'api' namespace package so "from api.app.XXX" imports work inside Docker.
 # All source files use api.app.* imports (works locally); inside Docker the app

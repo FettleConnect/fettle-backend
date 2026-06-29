@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -66,6 +67,10 @@ class User(TimestampMixin, Base):
     availability_json: Mapped[dict | None] = mapped_column(JSONB)
     timings: Mapped[str | None] = mapped_column(String(255))
     consultation_fee: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    legacy_pin_code: Mapped[str | None] = mapped_column(String(16))
+    legacy_token_version: Mapped[int] = mapped_column(default=0, nullable=False)
+    must_change_pin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     # ── Corporate employee fields ────────────────────────────────────────────
     company: Mapped[str | None] = mapped_column(String(255))

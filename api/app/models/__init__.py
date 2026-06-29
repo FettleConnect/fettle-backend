@@ -39,14 +39,12 @@ from api.app.models.hospital.campaign import Campaign
 from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
 from api.app.models.hospital.patient import HospitalUploadLog, Patient
-from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
-from api.app.models.shared import GlobalConfig
-from fettle_backend.platform.jobs.models import Job, JobAttempt
-from fettle_backend.platform.observability.models import KpiEvent
-from fettle_backend.platform.storage.models import StoredFile
-from fettle_backend.products.transcribe.domain.models import (
+from api.app.models.hospital.transcribe import (
+    Job,
+    JobAttempt,
+    KpiEvent,
+    StoredFile,
     TranscribeArtifact,
-    TranscribeDoctor,
     TranscribeDraftDocument,
     TranscribeIntakeLink,
     TranscribePdfDeliveryJob,
@@ -59,6 +57,8 @@ from fettle_backend.products.transcribe.domain.models import (
     TranscribeSyncJob,
     TranscribeTranscription,
 )
+from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
+from api.app.models.shared import GlobalConfig
 
 __all__ = [
     "Organization",
@@ -103,7 +103,6 @@ __all__ = [
     "JobAttempt",
     "KpiEvent",
     "StoredFile",
-    "TranscribeDoctor",
     "TranscribeIntakeLink",
     "TranscribeSession",
     "TranscribeSessionAudio",

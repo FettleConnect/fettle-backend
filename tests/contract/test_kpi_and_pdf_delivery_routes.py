@@ -7,15 +7,15 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from fastapi.testclient import TestClient
 
-from fettle_backend.app.config import get_settings
-from fettle_backend.app.main import create_app
-from fettle_backend.platform.db.session import SessionFactory
-from fettle_backend.platform.observability.service import ObservabilityService
-from fettle_backend.platform.storage.local import LocalStorage
-from fettle_backend.products.transcribe.repositories.sqlalchemy import (
+from api.app.core.config import get_settings
+from api.app.main import app
+from api.app.transcribe.db import SessionFactory
+from api.app.transcribe.observability import ObservabilityService
+from api.app.transcribe.storage import LocalStorage
+from api.app.transcribe.repositories.sqlalchemy import (
     SqlSessionRepository,
 )
-from fettle_backend.products.transcribe.services.pdf_delivery import PdfDeliveryService
+from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
 
 
 def _auth_headers(client):
@@ -57,7 +57,7 @@ def internal_admin_client(client, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("INTERNAL_API_ENABLED", "true")
     monkeypatch.setenv("INTERNAL_API_KEY", "test-internal-key")
     get_settings.cache_clear()
-    with TestClient(create_app()) as admin_client:
+    with TestClient(app) as admin_client:
         yield admin_client
     get_settings.cache_clear()
 
@@ -70,7 +70,7 @@ def fettle_sync_admin_client(client, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("FETTLE_BACKEND_URL", "http://127.0.0.1:1")
     monkeypatch.setenv("FETTLE_SYNC_SECRET", "test-secret")
     get_settings.cache_clear()
-    with TestClient(create_app()) as admin_client:
+    with TestClient(app) as admin_client:
         yield admin_client
     get_settings.cache_clear()
 

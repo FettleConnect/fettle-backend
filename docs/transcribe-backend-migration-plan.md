@@ -59,25 +59,17 @@ At the end of this migration phase, `fettle-backend` should contain:
 ```text
 docs/
   transcribe-backend-migration-plan.md
-src/
-  app/
-    main.py
-    config.py
-  platform/
-    auth/
-    orgs/
-    storage/
+api/app/
+  models/
+    hospital/
+      transcribe.py
+  transcribe/
+    api/
+    domain/
+    services/
+    repositories/
+    schemas/
     jobs/
-    observability/
-    db/
-  products/
-    transcribe/
-      api/
-      domain/
-      services/
-      repositories/
-      schemas/
-      jobs/
 tests/
   unit/
   integration/
@@ -252,7 +244,6 @@ This is the table-by-table starting map for the `Transcribe` slice.
 
 ### `Transcribe` Tables
 
-- `transcribe_doctors`
 - `transcribe_intake_links`
 - `transcribe_sessions`
 - `transcribe_session_audio`
@@ -270,8 +261,8 @@ This is the table-by-table starting map for the `Transcribe` slice.
 ### Doctors
 
 - Mongo concept: seeded doctor repository
-- Target: `transcribe_doctors`
-- Notes: keep slug/addressing behavior for public intake and legacy auth compatibility
+- Target: shared `users` table with `role = doctor`
+- Notes: keep legacy PIN auth compatibility while reusing the existing doctor identity model
 
 ### Sessions
 

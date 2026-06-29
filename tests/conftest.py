@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -52,16 +51,11 @@ _set_test_default("FETTLE_SYNC_ENABLED", "false")
 _set_test_default("FETTLE_BACKEND_URL", "http://127.0.0.1:1")
 _set_test_default("FETTLE_SYNC_SECRET", "test-secret")
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = REPO_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
-
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
 from api.app.main import app  # noqa: E402
-from fettle_backend.products.transcribe.bootstrap import (  # noqa: E402
+from api.app.transcribe.bootstrap import (  # noqa: E402
     reset_transcribe_runtime_state,
     seed_transcribe_defaults,
 )
