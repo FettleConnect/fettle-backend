@@ -86,12 +86,18 @@ class ExtractReportContextResponse(BaseModel):
 
 class ReportContextExtractionJob(BaseModel):
     id: str
+    sessionId: str
     status: str
     uploadIds: list[str]
     totalUnits: int = 0
     completedUnits: int = 0
     failedUnits: int = 0
+    chunks: list[dict] = []
+    error: str | None = None
+    createdAt: str
+    startedAt: str | None = None
     updatedAt: str
+    finishedAt: str | None = None
     progress: dict | None = None
 
 
@@ -101,3 +107,7 @@ class CreateReportContextExtractionJobResponse(BaseModel):
 
 class GetReportContextExtractionJobResponse(BaseModel):
     job: ReportContextExtractionJob
+
+
+class GetActiveReportContextExtractionJobResponse(BaseModel):
+    job: ReportContextExtractionJob | None

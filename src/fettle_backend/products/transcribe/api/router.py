@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+import uuid
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, WebSocket, WebSocketDisconnect
 
 from fettle_backend.platform.observability.service import ObservabilityService
 from fettle_backend.platform.storage.local import LocalStorage
@@ -46,6 +48,7 @@ from fettle_backend.products.transcribe.schemas.sessions import (
     ExtractReportContextRequest,
     ExtractReportContextResponse,
     GenerateSessionPdfResponse,
+    GetActiveReportContextExtractionJobResponse,
     GetPatientHistoryResponse,
     GetReportContextExtractionJobResponse,
     GetSessionResponse,
@@ -62,9 +65,11 @@ from fettle_backend.products.transcribe.services.fettle_sync import FettleSyncSe
 from fettle_backend.products.transcribe.services.pdf_delivery import PdfDeliveryService
 from fettle_backend.products.transcribe.services.queue import QueueService
 from fettle_backend.products.transcribe.services.sessions import SessionService
+from fettle_backend.products.transcribe.services.transcription_provider import LocalTranscriptionProvider
 
 router = APIRouter(tags=["transcribe"])
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+_live_transcription_provider = LocalTranscriptionProvider()
 
 
 def _json_error_response(status_code: int, message: str) -> Response:
@@ -73,6 +78,21 @@ def _json_error_response(status_code: int, message: str) -> Response:
         content=f'{{"error":"{message}"}}',
         media_type="application/json",
     )
+
+
+def _build_live_preview_segments(transcript_segments: list[dict], *, is_final: bool) -> list[dict]:
+    return [
+        {
+            "id": str(uuid.uuid4()),
+            "speaker": segment.get("speaker", "unknown"),
+            "speakerLabel": segment.get("speakerLabel", "Speaker"),
+            "text": segment.get("text", ""),
+            "startedAtSeconds": segment.get("startedAtSeconds", 0),
+            "endedAtSeconds": segment.get("endedAtSeconds", segment.get("startedAtSeconds", 0)),
+            "isFinal": is_final,
+        }
+        for segment in transcript_segments
+    ]
 
 
 @router.get("/internal/migration-status", response_model=MigrationStatus)
@@ -141,6 +161,57 @@ async def change_pin(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     return await auth_service.change_pin(request.pinChangeToken, request.newPin)
+
+
+@router.websocket("/live-transcription")
+async def live_transcription_socket(
+    websocket: WebSocket,
+    auth_service: AuthService = Depends(get_auth_service),
+    session_service: SessionService = Depends(get_session_service),
+) -> None:
+    await websocket.accept()
+    live_session_id = str(uuid.uuid4())
+    started = False
+    preview_segments: list[dict] = []
+    try:
+        while True:
+            message = await websocket.receive()
+            if "text" in message and message["text"] is not None:
+                try:
+                    payload = json.loads(message["text"])
+                except Exception:
+                    continue
+                msg_type = payload.get("type")
+                if msg_type == "start":
+                    access_token = str(payload.get("accessToken", "")).strip()
+                    session_id = str(payload.get("sessionId", "")).strip()
+                    doctor = (await auth_service.current_doctor(access_token)).doctor
+                    session = await session_service.get_session(session_id, doctor.id)
+                    transcript = await _live_transcription_provider.transcribe(session)
+                    preview_segments = _build_live_preview_segments(
+                        list(transcript.get("transcriptSegments", [])),
+                        is_final=False,
+                    )
+                    started = True
+                    await websocket.send_json({"type": "ready", "liveSessionId": live_session_id})
+                    await websocket.send_json({"type": "preview", "segments": preview_segments})
+                    continue
+                if not started:
+                    continue
+                if msg_type == "stop":
+                    await websocket.send_json(
+                        {
+                            "type": "preview",
+                            "segments": [{**segment, "isFinal": True} for segment in preview_segments],
+                        }
+                    )
+                    continue
+                if msg_type in {"pause", "resume"}:
+                    continue
+            if "bytes" in message and message["bytes"] is not None and started and preview_segments:
+                await websocket.send_json({"type": "preview", "segments": preview_segments})
+    except WebSocketDisconnect:
+        return
 
 
 @router.get("/auth/me", response_model=AuthMeResponse, tags=["auth"])
@@ -415,6 +486,20 @@ async def get_report_context_extraction_job(
 ) -> GetReportContextExtractionJobResponse:
     job = await session_service.get_report_context_extraction_job(session_id, job_id, doctor.id)
     return GetReportContextExtractionJobResponse(job=job)
+
+
+@router.get(
+    "/sessions/{session_id}/report-context/jobs/active",
+    response_model=GetActiveReportContextExtractionJobResponse,
+    tags=["report-context"],
+)
+async def get_active_report_context_extraction_job(
+    session_id: str,
+    doctor=Depends(require_doctor),
+    session_service: SessionService = Depends(get_session_service),
+) -> GetActiveReportContextExtractionJobResponse:
+    job = await session_service.get_active_report_context_extraction_job(session_id, doctor.id)
+    return GetActiveReportContextExtractionJobResponse(job=job)
 
 
 @router.get("/sessions/{session_id}/report-context/jobs/{job_id}/stream", tags=["report-context"])
@@ -908,6 +993,14 @@ async def public_reliability_kpis(
     observability_service: ObservabilityService = Depends(get_observability_service),
 ) -> dict:
     return await observability_service.get_reliability_summary()
+
+
+@router.get("/public/kpi/ops-summary", tags=["kpi"])
+async def public_kpi_ops_summary(
+    window: str | None = Query(default=None),
+    observability_service: ObservabilityService = Depends(get_observability_service),
+) -> dict:
+    return await observability_service.get_ops_summary(window=window or "last_24h")
 
 
 @router.get("/public/kpi/scorecard", tags=["kpi"])

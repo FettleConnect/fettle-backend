@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorResponse(BaseModel):
-    message: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    error: str = Field(alias="message")
     code: str | None = None
 
 

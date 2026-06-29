@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fettle_backend.platform.jobs.models import Job
 from fettle_backend.platform.observability.models import KpiEvent
 from fettle_backend.platform.storage.models import StoredFile
+from fettle_backend.products.transcribe.id_codec import decode_public_id, encode_public_id
 from fettle_backend.products.transcribe.domain.models import (
     TranscribeArtifact,
     TranscribeDoctor,
@@ -48,6 +49,38 @@ from fettle_backend.products.transcribe.schemas.queue import IntakeLink, Patient
 PDF_DELIVERY_BLOCK_TTL_SECONDS = 120
 
 
+def _decode_doctor_id(value: str) -> int:
+    return decode_public_id(value, "doctor")
+
+
+def _decode_session_id(value: str) -> int:
+    return decode_public_id(value, "session")
+
+
+def _decode_report_job_id(value: str) -> int:
+    return decode_public_id(value, "report_job")
+
+
+def _decode_report_upload_id(value: str) -> int:
+    return decode_public_id(value, "report_upload")
+
+
+def _decode_queue_entry_id(value: str) -> int:
+    return decode_public_id(value, "queue_entry")
+
+
+def _decode_intake_link_id(value: str) -> int:
+    return decode_public_id(value, "intake_link")
+
+
+def _decode_pdf_delivery_job_id(value: str) -> int:
+    return decode_public_id(value, "pdf_delivery_job")
+
+
+def _decode_sync_job_id(value: str) -> int:
+    return decode_public_id(value, "sync_job")
+
+
 def _slugify(value: str) -> str:
     normalized = value.strip().lower().replace("&", " and ")
     normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
@@ -56,7 +89,7 @@ def _slugify(value: str) -> str:
 
 def _doctor_profile_from_model(model: TranscribeDoctor) -> DoctorProfile:
     return DoctorProfile(
-        id=str(model.id),
+        id=encode_public_id("doctor", model.id),
         name=model.name,
         department=model.department,
         phoneNumber=model.phone_number,
@@ -68,7 +101,7 @@ def _doctor_profile_from_model(model: TranscribeDoctor) -> DoctorProfile:
 
 def _public_doctor_profile_from_model(model: TranscribeDoctor) -> PublicDoctorProfile:
     return PublicDoctorProfile(
-        id=str(model.id),
+        id=encode_public_id("doctor", model.id),
         name=model.name,
         department=model.department,
     )
@@ -76,8 +109,8 @@ def _public_doctor_profile_from_model(model: TranscribeDoctor) -> PublicDoctorPr
 
 def _intake_link_from_model(model: TranscribeIntakeLink, doctor_name: str) -> IntakeLink:
     return IntakeLink(
-        id=str(model.id),
-        doctorId=str(model.doctor_id),
+        id=encode_public_id("intake_link", model.id),
+        doctorId=encode_public_id("doctor", model.doctor_id),
         doctorName=doctor_name,
         label=model.label,
         token=model.token,
@@ -89,9 +122,9 @@ def _intake_link_from_model(model: TranscribeIntakeLink, doctor_name: str) -> In
 
 def _queue_entry_from_model(model: TranscribeQueueEntry) -> QueueEntry:
     return QueueEntry(
-        id=str(model.id),
-        doctorId=str(model.doctor_id),
-        intakeLinkId=str(model.intake_link_id) if model.intake_link_id is not None else "",
+        id=encode_public_id("queue_entry", model.id),
+        doctorId=encode_public_id("doctor", model.doctor_id),
+        intakeLinkId=encode_public_id("intake_link", model.intake_link_id) if model.intake_link_id is not None else "",
         intakeLabel=model.intake_label,
         patient=QueuePatient(
             name=model.patient_name,
@@ -102,7 +135,7 @@ def _queue_entry_from_model(model: TranscribeQueueEntry) -> QueueEntry:
         source=model.source,  # type: ignore[arg-type]
         submittedAt=model.submitted_at,
         acceptedAt=model.accepted_at,
-        sessionId=str(model.session_id) if model.session_id is not None else None,
+        sessionId=encode_public_id("session", model.session_id) if model.session_id is not None else None,
         createdAt=model.created_at,
         updatedAt=model.updated_at,
     )
@@ -123,8 +156,8 @@ def _pdf_delivery_settings_payload(model: TranscribePdfDeliverySettings | None) 
 
 def _pdf_delivery_job_payload(model: TranscribePdfDeliveryJob) -> dict:
     return {
-        "id": str(model.id),
-        "sessionId": str(model.session_id),
+        "id": encode_public_id("pdf_delivery_job", model.id),
+        "sessionId": encode_public_id("session", model.session_id),
         "recipientType": model.recipient_type,
         "recipientName": model.recipient_name,
         "phoneNumber": model.phone_number,
@@ -160,8 +193,8 @@ def _report_context_text_from_file(document: TranscribeReportContextDocument, st
 
 def _sync_job_payload(model: TranscribeSyncJob) -> dict:
     return {
-        "id": str(model.id),
-        "sessionId": model.external_session_id or (str(model.session_id) if model.session_id is not None else "dry-run"),
+        "id": encode_public_id("sync_job", model.id),
+        "sessionId": model.external_session_id or (encode_public_id("session", model.session_id) if model.session_id is not None else "dry-run"),
         "trigger": model.trigger,
         "status": model.status,
         "attempts": model.attempts,
@@ -173,6 +206,17 @@ def _sync_job_payload(model: TranscribeSyncJob) -> dict:
         **({"lastErrorClass": model.last_error_class} if model.last_error_class else {}),
         **({"finishedAt": model.finished_at.isoformat()} if model.finished_at else {}),
     }
+
+
+def _public_job_status(status: str) -> str:
+    return {
+        "queued": "queued",
+        "processing": "processing",
+        "completed": "ready",
+        "failed": "failed",
+        "cancelled": "canceled",
+        "canceled": "canceled",
+    }.get(status, status)
 
 
 async def _session_from_model(session: AsyncSession, model: TranscribeSession) -> ConsultationSession:
@@ -248,7 +292,7 @@ async def _session_from_model(session: AsyncSession, model: TranscribeSession) -
     if artifact_row is not None:
         artifact_model, file_model = artifact_row
         document_artifact = DocumentArtifact(
-            id=str(artifact_model.id),
+            id=encode_public_id("document_artifact", artifact_model.id),
             fileName=file_model.original_filename,
             mimeType=file_model.content_type,
             sizeBytes=file_model.size_bytes,
@@ -269,7 +313,7 @@ async def _session_from_model(session: AsyncSession, model: TranscribeSession) -
         items = list((await session.scalars(items_stmt)).all())
         chunks = [
             ReportContextChunk(
-                id=str(item.id),
+                id=encode_public_id("report_chunk", item.id),
                 label=item.label,
                 pageNumber=item.page_number,
                 text=item.extracted_text,
@@ -290,13 +334,13 @@ async def _session_from_model(session: AsyncSession, model: TranscribeSession) -
         report_context = SessionReportContext(
             status="processing" if processing_doc is not None else "ready",
             chunks=chunks,
-            extractedUploadIds=[str(doc.id) for doc in report_docs if doc.status == "ready"],
+            extractedUploadIds=[encode_public_id("report_upload", doc.id) for doc in report_docs if doc.status == "ready"],
             progress=progress,
         )
 
     return ConsultationSession(
-        id=str(model.id),
-        doctorId=str(model.doctor_id),
+        id=encode_public_id("session", model.id),
+        doctorId=encode_public_id("doctor", model.doctor_id),
         patient=PatientSummary(
             name=model.patient_name or "",
             phoneNumber=model.patient_phone_number or "",
@@ -379,7 +423,7 @@ class SqlDoctorRepository:
 
     async def find_by_id(self, doctor_id: str) -> SqlDoctorRecord | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         doctor = await self.session.get(TranscribeDoctor, doctor_pk)
@@ -461,7 +505,7 @@ class SqlDoctorRepository:
         email: str | None,
     ) -> DoctorProfile | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeDoctor, doctor_pk)
@@ -479,7 +523,7 @@ class SqlDoctorRepository:
 
     async def reset_pin(self, doctor_id: str, temporary_pin: str) -> DoctorProfile | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeDoctor, doctor_pk)
@@ -497,7 +541,7 @@ class SqlDoctorRepository:
 
     async def set_pin(self, doctor_id: str, new_pin: str) -> DoctorProfile | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeDoctor, doctor_pk)
@@ -521,7 +565,7 @@ class SqlDoctorRepository:
 
     async def touch_last_login(self, doctor_id: str) -> SqlDoctorRecord | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         doctor = await self.session.get(TranscribeDoctor, doctor_pk)
@@ -543,7 +587,7 @@ class SqlSyncRepository:
             return _sync_job_payload(existing)
         session_id = str(job.get("sessionId", ""))
         model = TranscribeSyncJob(
-            session_id=int(session_id) if session_id.isdigit() else None,
+            session_id=_decode_session_id(session_id) if session_id not in {"", "dry-run"} else None,
             status="queued",
             trigger=job["trigger"],
             idempotency_key=job["idempotencyKey"],
@@ -602,7 +646,7 @@ class SqlSyncRepository:
         return [{**_sync_job_payload(job), "payload": json.loads(job.payload_json), "idempotencyKey": job.idempotency_key} for job in jobs]
 
     async def mark_succeeded(self, job_id: str, finished_at: datetime) -> None:
-        job = await self.session.get(TranscribeSyncJob, int(job_id))
+        job = await self.session.get(TranscribeSyncJob, _decode_sync_job_id(job_id))
         if job is None:
             return
         job.status = "succeeded"
@@ -622,7 +666,7 @@ class SqlSyncRepository:
         last_error_class: str,
         finished_at: datetime | None,
     ) -> None:
-        job = await self.session.get(TranscribeSyncJob, int(job_id))
+        job = await self.session.get(TranscribeSyncJob, _decode_sync_job_id(job_id))
         if job is None:
             return
         job.status = status
@@ -635,7 +679,7 @@ class SqlSyncRepository:
 
     async def replay_dead_letter(self, job_id: str, now: datetime) -> dict | None:
         try:
-            job_pk = int(job_id)
+            job_pk = _decode_sync_job_id(job_id)
         except ValueError:
             return None
         job = await self.session.get(TranscribeSyncJob, job_pk)
@@ -665,7 +709,7 @@ class SqlSessionRepository:
         patient_age: int | None,
     ) -> ConsultationSession:
         model = TranscribeSession(
-            doctor_id=int(doctor_id),
+            doctor_id=_decode_doctor_id(doctor_id),
             patient_name=patient_name,
             patient_phone_number=patient_phone_number,
             patient_age=patient_age,
@@ -678,7 +722,7 @@ class SqlSessionRepository:
         return await _session_from_model(self.session, model)
 
     async def list_sessions(self, doctor_id: str, search: str | None = None) -> list[ConsultationSession]:
-        stmt = select(TranscribeSession).where(TranscribeSession.doctor_id == int(doctor_id))
+        stmt = select(TranscribeSession).where(TranscribeSession.doctor_id == _decode_doctor_id(doctor_id))
         normalized = (search or "").strip()
         if normalized:
             like = f"%{normalized.lower()}%"
@@ -694,8 +738,8 @@ class SqlSessionRepository:
 
     async def get_session(self, session_id: str, doctor_id: str) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = select(TranscribeSession).where(
@@ -707,7 +751,7 @@ class SqlSessionRepository:
 
     async def get_session_any(self, session_id: str) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeSession, session_pk)
@@ -720,9 +764,9 @@ class SqlSessionRepository:
         stmt = (
             select(TranscribeSession)
             .where(
-                TranscribeSession.doctor_id == int(doctor_id),
+                TranscribeSession.doctor_id == _decode_doctor_id(doctor_id),
                 TranscribeSession.patient_phone_number == current.patient.phoneNumber,
-                TranscribeSession.id != int(session_id),
+                TranscribeSession.id != _decode_session_id(session_id),
                 TranscribeSession.created_at < current.createdAt,
             )
             .order_by(TranscribeSession.created_at.desc())
@@ -739,7 +783,7 @@ class SqlSessionRepository:
     ) -> list[ConsultationSession]:
         stmt = select(TranscribeSession)
         if doctor_id is not None:
-            stmt = stmt.where(TranscribeSession.doctor_id == int(doctor_id))
+            stmt = stmt.where(TranscribeSession.doctor_id == _decode_doctor_id(doctor_id))
         normalized = (search or "").strip()
         if normalized:
             like = f"%{normalized.lower()}%"
@@ -757,7 +801,7 @@ class SqlSessionRepository:
         stmt = (
             select(TranscribeSession)
             .where(
-                TranscribeSession.doctor_id == int(doctor_id),
+                TranscribeSession.doctor_id == _decode_doctor_id(doctor_id),
                 TranscribeSession.patient_phone_number == phone_number,
             )
             .order_by(TranscribeSession.created_at.desc())
@@ -774,8 +818,8 @@ class SqlSessionRepository:
 
     async def update_case_status(self, session_id: str, doctor_id: str, case_status: str) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = select(TranscribeSession).where(
@@ -825,8 +869,8 @@ class SqlSessionRepository:
         storage_key: str,
     ) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         session_stmt = select(TranscribeSession).where(TranscribeSession.id == session_pk, TranscribeSession.doctor_id == doctor_pk)
@@ -862,8 +906,8 @@ class SqlSessionRepository:
         idempotency_key: str | None,
     ) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         session_stmt = select(TranscribeSession).where(TranscribeSession.id == session_pk, TranscribeSession.doctor_id == doctor_pk)
@@ -898,7 +942,7 @@ class SqlSessionRepository:
 
     async def complete_transcription(self, session_id: str, result: dict) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         session_model = await self.session.get(TranscribeSession, session_pk)
@@ -942,8 +986,8 @@ class SqlSessionRepository:
 
     async def update_draft_document(self, session_id: str, doctor_id: str, draft_document: dict) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         session_stmt = select(TranscribeSession).where(TranscribeSession.id == session_pk, TranscribeSession.doctor_id == doctor_pk)
@@ -987,8 +1031,8 @@ class SqlSessionRepository:
         size_bytes: int,
     ) -> ConsultationSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = select(TranscribeSession).where(
@@ -1036,7 +1080,7 @@ class SqlSessionRepository:
         pharmacy: dict | None,
     ) -> dict | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         session_model = await self.session.get(TranscribeSession, session_pk)
@@ -1059,7 +1103,7 @@ class SqlSessionRepository:
 
     async def get_pdf_delivery_status(self, session_id: str) -> dict | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         session_model = await self.session.get(TranscribeSession, session_pk)
@@ -1075,7 +1119,7 @@ class SqlSessionRepository:
 
     async def enqueue_pdf_delivery_jobs(self, session_id: str) -> list[dict] | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         session_model = await self.session.get(TranscribeSession, session_pk)
@@ -1087,7 +1131,7 @@ class SqlSessionRepository:
 
     async def list_pdf_delivery_jobs_by_session(self, session_id: str) -> list[dict]:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return []
         stmt = (
@@ -1107,7 +1151,7 @@ class SqlSessionRepository:
     ) -> list[dict]:
         stmt = select(TranscribePdfDeliveryJob)
         if session_id:
-            stmt = stmt.where(TranscribePdfDeliveryJob.session_id == int(session_id))
+            stmt = stmt.where(TranscribePdfDeliveryJob.session_id == _decode_session_id(session_id))
         if status:
             stmt = stmt.where(TranscribePdfDeliveryJob.status == status)
         if recipient_type:
@@ -1118,7 +1162,7 @@ class SqlSessionRepository:
 
     async def get_pdf_delivery_job(self, job_id: str) -> dict | None:
         try:
-            job_pk = int(job_id)
+            job_pk = _decode_pdf_delivery_job_id(job_id)
         except ValueError:
             return None
         job = await self.session.get(TranscribePdfDeliveryJob, job_pk)
@@ -1151,7 +1195,7 @@ class SqlSessionRepository:
         sent_at: datetime | None = None,
     ) -> dict | None:
         try:
-            job_pk = int(job_id)
+            job_pk = _decode_pdf_delivery_job_id(job_id)
         except ValueError:
             return None
         job = await self.session.get(TranscribePdfDeliveryJob, job_pk)
@@ -1238,8 +1282,8 @@ class SqlSessionRepository:
 
     async def get_audio_download(self, session_id: str, doctor_id: str) -> tuple[StoredFile, TranscribeSessionAudio] | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = (
@@ -1258,7 +1302,7 @@ class SqlSessionRepository:
 
     async def get_audio_download_any(self, session_id: str) -> tuple[StoredFile, TranscribeSessionAudio] | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         stmt = (
@@ -1273,8 +1317,8 @@ class SqlSessionRepository:
 
     async def get_pdf_download(self, session_id: str, doctor_id: str) -> StoredFile | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = (
@@ -1293,7 +1337,7 @@ class SqlSessionRepository:
 
     async def get_pdf_download_any(self, session_id: str) -> StoredFile | None:
         try:
-            session_pk = int(session_id)
+            session_pk = _decode_session_id(session_id)
         except ValueError:
             return None
         stmt = (
@@ -1434,7 +1478,7 @@ class SqlSessionRepository:
         session_model.updated_at = now
         await self.session.commit()
         await self.session.refresh(job)
-        return self._report_context_job_payload(job)
+        return await self._report_context_job_payload(job)
 
     async def get_report_context_job(
         self,
@@ -1448,11 +1492,39 @@ class SqlSessionRepository:
         job = await self._load_report_context_job(session_model.id, job_id)
         if job is None:
             return None
-        return self._report_context_job_payload(job)
+        return await self._report_context_job_payload(job)
+
+    async def get_active_report_context_job(
+        self,
+        session_id: str,
+        doctor_id: str,
+    ) -> dict | None:
+        session_model = await self._load_session(session_id, doctor_id)
+        if session_model is None:
+            return None
+        stmt = (
+            select(Job)
+            .where(
+                Job.product == "transcribe",
+                Job.job_type == "report_context_extract",
+                Job.status.in_(["queued", "processing"]),
+            )
+            .order_by(Job.created_at.desc())
+        )
+        jobs = list((await self.session.scalars(stmt)).all())
+        for job in jobs:
+            payload = json.loads(job.payload_json)
+            try:
+                payload_session_pk = _decode_session_id(str(payload["sessionId"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if payload_session_pk == session_model.id:
+                return await self._report_context_job_payload(job)
+        return None
 
     async def complete_report_context_job(self, job_id: str) -> ConsultationSession | None:
         try:
-            job_pk = int(job_id)
+            job_pk = _decode_report_job_id(job_id)
         except ValueError:
             return None
         job = await self.session.get(Job, job_pk)
@@ -1479,7 +1551,7 @@ class SqlSessionRepository:
             return None
         job.status = "cancelled"
         payload = json.loads(job.payload_json)
-        upload_ids = [int(upload_id) for upload_id in payload.get("uploadIds", [])]
+        upload_ids = [_decode_report_upload_id(str(upload_id)) for upload_id in payload.get("uploadIds", [])]
         if upload_ids:
             stmt = select(TranscribeReportContextDocument).where(
                 TranscribeReportContextDocument.session_id == session_model.id,
@@ -1489,12 +1561,12 @@ class SqlSessionRepository:
             for doc in docs:
                 doc.status = "uploaded"
         await self.session.commit()
-        return self._report_context_job_payload(job)
+        return await self._report_context_job_payload(job)
 
     async def _load_session(self, session_id: str, doctor_id: str) -> TranscribeSession | None:
         try:
-            session_pk = int(session_id)
-            doctor_pk = int(doctor_id)
+            session_pk = _decode_session_id(session_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = select(TranscribeSession).where(
@@ -1513,7 +1585,7 @@ class SqlSessionRepository:
         if session_model is None:
             return None
         try:
-            upload_pk = int(upload_id)
+            upload_pk = _decode_report_upload_id(upload_id)
         except ValueError:
             return None
         stmt = (
@@ -1535,7 +1607,7 @@ class SqlSessionRepository:
         if not upload_ids:
             return []
         try:
-            upload_pks = [int(upload_id) for upload_id in upload_ids]
+            upload_pks = [_decode_report_upload_id(upload_id) for upload_id in upload_ids]
         except ValueError:
             return []
         stmt = (
@@ -1550,7 +1622,7 @@ class SqlSessionRepository:
 
     async def _load_report_context_job(self, session_pk: int, job_id: str) -> Job | None:
         try:
-            job_pk = int(job_id)
+            job_pk = _decode_report_job_id(job_id)
         except ValueError:
             return None
         job = await self.session.get(Job, job_pk)
@@ -1558,7 +1630,7 @@ class SqlSessionRepository:
             return None
         payload = json.loads(job.payload_json)
         try:
-            payload_session_pk = int(payload["sessionId"])
+            payload_session_pk = _decode_session_id(str(payload["sessionId"]))
         except (KeyError, TypeError, ValueError):
             return None
         return job if payload_session_pk == session_pk else None
@@ -1569,33 +1641,64 @@ class SqlSessionRepository:
         stored_file: StoredFile,
     ) -> dict:
         return {
-            "id": str(document.id),
+            "id": encode_public_id("report_upload", document.id),
             "fileName": stored_file.original_filename,
             "mimeType": stored_file.content_type,
             "sizeBytes": stored_file.size_bytes,
             "expiresAt": document.created_at.isoformat(),
         }
 
-    def _report_context_job_payload(self, job: Job) -> dict:
+    async def _report_context_job_payload(self, job: Job) -> dict:
         payload = json.loads(job.payload_json)
         total_units = len(payload.get("uploadIds", []))
         completed_units = total_units if job.status == "completed" else 0
         failed_units = total_units if job.status == "failed" else 0
+        chunks: list[dict] = []
+        session_pk = None
+        try:
+            session_pk = _decode_session_id(str(payload["sessionId"]))
+        except (KeyError, TypeError, ValueError):
+            session_pk = None
+        if session_pk is not None:
+            doc_stmt = select(TranscribeReportContextDocument).where(TranscribeReportContextDocument.session_id == session_pk)
+            report_docs = list((await self.session.scalars(doc_stmt)).all())
+            if report_docs:
+                doc_ids = [doc.id for doc in report_docs]
+                item_stmt = select(TranscribeReportContextItem).where(TranscribeReportContextItem.document_id.in_(doc_ids))
+                items = list((await self.session.scalars(item_stmt)).all())
+                chunks = [
+                    {
+                        "id": encode_public_id("report_chunk", item.id),
+                        "sourceFileName": item.label or "Imported report",
+                        "title": item.label or "Imported report",
+                        "category": "report_context",
+                        "text": item.extracted_text,
+                        "extractedAt": job.created_at.isoformat(),
+                        **({"pageNumber": item.page_number} if item.page_number is not None else {}),
+                    }
+                    for item in items
+                ]
+        public_status = _public_job_status(job.status)
         return {
-            "id": str(job.id),
-            "status": job.status,
+            "id": encode_public_id("report_job", job.id),
+            "sessionId": str(payload["sessionId"]),
+            "status": public_status,
             "uploadIds": [str(upload_id) for upload_id in payload.get("uploadIds", [])],
             "totalUnits": total_units,
             "completedUnits": completed_units,
             "failedUnits": failed_units,
+            "chunks": chunks,
+            "createdAt": job.created_at.isoformat(),
+            "startedAt": job.created_at.isoformat(),
             "updatedAt": job.created_at.isoformat(),
+            "finishedAt": job.created_at.isoformat() if public_status in {"ready", "failed", "canceled"} else None,
             "progress": {
                 "totalUnits": total_units,
                 "completedUnits": completed_units,
                 "failedUnits": failed_units,
                 "startedAt": job.created_at.isoformat(),
                 "updatedAt": job.created_at.isoformat(),
-                "currentStage": "Extracting report content" if job.status == "processing" else "Completed",
+                "currentStage": "Extracting report content" if public_status in {"queued", "processing"} else "Completed",
             },
         }
 
@@ -1606,7 +1709,7 @@ class SqlQueueRepository:
 
     async def get_or_create_default_intake_link(self, doctor_id: str, doctor_name: str) -> IntakeLink | None:
         try:
-            doctor_pk = int(doctor_id)
+            doctor_pk = _decode_doctor_id(doctor_id)
         except ValueError:
             return None
         stmt = select(TranscribeIntakeLink).where(TranscribeIntakeLink.doctor_id == doctor_pk).limit(1)
@@ -1655,8 +1758,8 @@ class SqlQueueRepository:
         source: str,
     ) -> QueueEntry:
         model = TranscribeQueueEntry(
-            doctor_id=int(doctor_id),
-            intake_link_id=int(intake_link_id),
+            doctor_id=_decode_doctor_id(doctor_id),
+            intake_link_id=_decode_intake_link_id(intake_link_id),
             intake_label=intake_label,
             patient_name=patient_name,
             patient_phone_number=patient_phone_number,
@@ -1673,7 +1776,7 @@ class SqlQueueRepository:
         stmt = (
             select(TranscribeQueueEntry)
             .where(
-                TranscribeQueueEntry.doctor_id == int(doctor_id),
+                TranscribeQueueEntry.doctor_id == _decode_doctor_id(doctor_id),
                 TranscribeQueueEntry.patient_phone_number == phone_number,
                 TranscribeQueueEntry.status == "waiting",
             )
@@ -1687,7 +1790,7 @@ class SqlQueueRepository:
         stmt = (
             select(TranscribeQueueEntry)
             .where(
-                TranscribeQueueEntry.doctor_id == int(doctor_id),
+                TranscribeQueueEntry.doctor_id == _decode_doctor_id(doctor_id),
                 TranscribeQueueEntry.status == "waiting",
             )
             .order_by(TranscribeQueueEntry.submitted_at.asc())
@@ -1704,7 +1807,7 @@ class SqlQueueRepository:
     ) -> list[QueueEntry]:
         stmt = select(TranscribeQueueEntry)
         if doctor_id is not None:
-            stmt = stmt.where(TranscribeQueueEntry.doctor_id == int(doctor_id))
+            stmt = stmt.where(TranscribeQueueEntry.doctor_id == _decode_doctor_id(doctor_id))
         if status is not None:
             stmt = stmt.where(TranscribeQueueEntry.status == status)
         normalized = (search or "").strip()
@@ -1722,7 +1825,7 @@ class SqlQueueRepository:
 
     async def get_queue_entry_by_id(self, queue_entry_id: str) -> QueueEntry | None:
         try:
-            queue_entry_pk = int(queue_entry_id)
+            queue_entry_pk = _decode_queue_entry_id(queue_entry_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeQueueEntry, queue_entry_pk)
@@ -1734,14 +1837,14 @@ class SqlQueueRepository:
             TranscribeDoctor.id == TranscribeIntakeLink.doctor_id,
         )
         if doctor_id is not None:
-            stmt = stmt.where(TranscribeIntakeLink.doctor_id == int(doctor_id))
+            stmt = stmt.where(TranscribeIntakeLink.doctor_id == _decode_doctor_id(doctor_id))
         stmt = stmt.order_by(TranscribeIntakeLink.updated_at.desc())
         rows = (await self.session.execute(stmt)).all()
         return [_intake_link_from_model(link, doctor.name) for link, doctor in rows]
 
     async def get_intake_link_by_id(self, intake_link_id: str) -> IntakeLink | None:
         try:
-            intake_link_pk = int(intake_link_id)
+            intake_link_pk = _decode_intake_link_id(intake_link_id)
         except ValueError:
             return None
         stmt = (
@@ -1764,7 +1867,7 @@ class SqlQueueRepository:
         is_active: bool | None,
     ) -> IntakeLink | None:
         try:
-            intake_link_pk = int(intake_link_id)
+            intake_link_pk = _decode_intake_link_id(intake_link_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeIntakeLink, intake_link_pk)
@@ -1783,7 +1886,7 @@ class SqlQueueRepository:
 
     async def accept_queue_entry(self, queue_entry_id: str, session_id: str) -> QueueEntry | None:
         try:
-            queue_entry_pk = int(queue_entry_id)
+            queue_entry_pk = _decode_queue_entry_id(queue_entry_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeQueueEntry, queue_entry_pk)
@@ -1795,14 +1898,14 @@ class SqlQueueRepository:
         model.status = "accepted"
         model.accepted_at = accepted_at
         model.updated_at = accepted_at
-        model.session_id = int(session_id)
+        model.session_id = _decode_session_id(session_id)
         await self.session.commit()
         await self.session.refresh(model)
         return _queue_entry_from_model(model)
 
     async def update_queue_entry_status(self, queue_entry_id: str, status: str) -> QueueEntry | None:
         try:
-            queue_entry_pk = int(queue_entry_id)
+            queue_entry_pk = _decode_queue_entry_id(queue_entry_id)
         except ValueError:
             return None
         model = await self.session.get(TranscribeQueueEntry, queue_entry_pk)

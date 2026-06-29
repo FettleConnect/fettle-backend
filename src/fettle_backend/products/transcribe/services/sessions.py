@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 from typing import cast
 
@@ -125,7 +126,7 @@ class SessionService:
         )
         if not updated:
             raise HTTPException(status_code=404, detail=ErrorResponse(message="Session not found.").model_dump())
-        asyncio.create_task(self._complete_transcription(session_id))
+        self._launch_background(self._complete_transcription(session_id))
         return updated
 
     async def request_transcription_admin(self, session_id: str, idempotency_key: str | None) -> ConsultationSession:
@@ -334,7 +335,7 @@ class SessionService:
                 status_code=404,
                 detail=ErrorResponse(message="One or more report uploads could not be loaded.").model_dump(),
             )
-        asyncio.create_task(self._complete_report_context_job(str(job["id"])))
+        self._launch_background(self._complete_report_context_job(str(job["id"])))
         return ReportContextExtractionJob.model_validate(job)
 
     async def get_report_context_extraction_job(
@@ -351,6 +352,18 @@ class SessionService:
                 status_code=404,
                 detail=ErrorResponse(message="Report-context extraction job not found.").model_dump(),
             )
+        return ReportContextExtractionJob.model_validate(job)
+
+    async def get_active_report_context_extraction_job(
+        self,
+        session_id: str,
+        doctor_id: str,
+    ) -> ReportContextExtractionJob | None:
+        session = await self.get_session(session_id, doctor_id)
+        self._ensure_report_context_ready_for_uploads(session)
+        job = await self.repository.get_active_report_context_job(session_id, doctor_id)
+        if job is None:
+            return None
         return ReportContextExtractionJob.model_validate(job)
 
     async def cancel_report_context_extraction_job(
@@ -438,3 +451,7 @@ class SessionService:
                 status_code=409,
                 detail=ErrorResponse(message="Complete transcription before extracting report context.").model_dump(),
             )
+
+    def _launch_background(self, coroutine) -> None:
+        thread = threading.Thread(target=lambda: asyncio.run(coroutine), daemon=True)
+        thread.start()

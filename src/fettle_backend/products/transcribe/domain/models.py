@@ -22,7 +22,7 @@ class TranscribeDoctor(Base):
     __tablename__ = "transcribe_doctors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True)
+    workspace_id: Mapped[int | None] = mapped_column(nullable=True)
     name: Mapped[str] = mapped_column(String(255))
     department: Mapped[str | None] = mapped_column(String(255), nullable=True)
     department_slug: Mapped[str] = mapped_column(String(255), index=True)
