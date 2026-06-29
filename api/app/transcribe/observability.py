@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from statistics import mean
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,6 +63,15 @@ LATEST_EVENT_STALE_THRESHOLD_MS = {
     "this_month": 72 * 60 * 60 * 1000,
 }
 MINIMUM_CONSULTATIONS_FOR_VERDICT = 5
+
+
+class ScorecardMetric(TypedDict):
+    metric: str
+    total: int
+    success: int
+    failure: int
+    rating: str
+    successRate: float
 
 
 def section_for_metric(metric_key: str) -> str:
@@ -174,7 +184,7 @@ class ObservabilityService:
         for section_name in sorted(set(grouped.keys()) | set(EXPECTED_METRICS.keys())):
             if section and section_name != section:
                 continue
-            metrics = []
+            metrics: list[ScorecardMetric] = []
             metric_names = set(grouped.get(section_name, {}).keys())
             if include_expected:
                 metric_names.update(EXPECTED_METRICS.get(section_name, []))
