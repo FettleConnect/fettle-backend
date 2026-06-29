@@ -125,12 +125,12 @@ def test_extract_report_context_async_job_completes(client) -> None:
             f"/sessions/{session['id']}/report-context/jobs/{job['id']}",
             headers=headers,
         )
-        if polled.json()["job"]["status"] == "completed":
+        if polled.json()["job"]["status"] == "ready":
             break
 
     assert polled is not None
     assert polled.status_code == 200
-    assert polled.json()["job"]["status"] == "completed"
+    assert polled.json()["job"]["status"] == "ready"
 
     fetched = client.get(f"/sessions/{session['id']}", headers=headers)
     report_context = fetched.json()["session"]["reportContext"]
@@ -191,7 +191,7 @@ def test_report_context_upload_delete_and_job_controls(client) -> None:
         headers=headers,
     )
     assert cancelled.status_code == 200
-    assert cancelled.json()["job"]["status"] == "cancelled"
+    assert cancelled.json()["job"]["status"] == "canceled"
 
 
 def test_report_context_suggestions_and_apply_update_draft_document(client) -> None:

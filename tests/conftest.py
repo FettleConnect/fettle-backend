@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import uuid
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
@@ -37,11 +39,29 @@ _set_test_default("LIVEKIT_API_KEY", "")
 _set_test_default("LIVEKIT_API_SECRET", "")
 _set_test_default("OPENAI_API_KEY", "test-openai-key")
 _set_test_default("OPENROUTER_API_KEY", "test-openrouter-key")
+_set_test_default("LEGACY_AUTH_SECRET", "test-legacy-auth-secret")
+_set_test_default("INTERNAL_API_ENABLED", "false")
+_set_test_default("INTERNAL_API_KEY", "test-internal-key")
+_set_test_default("ARTIFACT_STORAGE_ROOT", str(Path(__file__).resolve().parents[1] / "var" / "test-artifacts"))
+_set_test_default("PDF_DELIVERY_PUBLIC_BASE_URL", "http://localhost:8000")
+_set_test_default("PDF_DELIVERY_TOKEN_SECRET", "test-pdf-delivery-secret")
+_set_test_default("FETTLE_SYNC_ENABLED", "false")
+_set_test_default("FETTLE_BACKEND_URL", "http://127.0.0.1:1")
+_set_test_default("FETTLE_SYNC_SECRET", "test-secret")
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
 from api.app.main import app  # noqa: E402
+from fettle_backend.products.transcribe.bootstrap import (  # noqa: E402
+    reset_transcribe_runtime_state,
+    seed_transcribe_defaults,
+)
 
 # ── Test database engine ──────────────────────────────────────────────────────
 
@@ -174,6 +194,18 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
 def sync_client() -> TestClient:
     """Synchronous WSGI-style test client for simple endpoint tests (no DB seed needed)."""
     return TestClient(app)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _seed_transcribe_defaults(db_session: AsyncSession) -> AsyncGenerator[None, None]:
+    await seed_transcribe_defaults(db_session)
+    await reset_transcribe_runtime_state(db_session)
+    yield
+
+
+@pytest.fixture
+def client(sync_client: TestClient) -> TestClient:
+    return sync_client
 
 
 # ── Reusable test data factories ──────────────────────────────────────────────
