@@ -1,3 +1,5 @@
+"""Root-level PWA transcript compatibility routes."""
+
 from __future__ import annotations
 
 import json
@@ -15,7 +17,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 
-from api.app.transcribe.api.dependencies import (
+from api.app.views.pwa_transcript_dependencies import (
     get_auth_service,
     get_fettle_sync_service,
     get_observability_service,
@@ -80,6 +82,7 @@ from api.app.transcribe.services.transcription_provider import (
 )
 from api.app.transcribe.storage import LocalStorage
 
+# LEGACY: root-level Express-style routes consumed by the PWA transcript client.
 router = APIRouter(tags=["transcribe"])
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
 _live_transcription_provider = LocalTranscriptionProvider()

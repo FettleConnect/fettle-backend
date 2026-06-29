@@ -1821,10 +1821,13 @@ class SqlSessionRepository:
         doctor_id = str(payload["doctorId"])
         upload_ids = [str(upload_id) for upload_id in payload.get("uploadIds", [])]
         updated = await self.extract_report_context(session_id, doctor_id, upload_ids)
+        await self.session.refresh(job)
+        if job.status == "cancelled":
+            await self._reset_cancelled_report_context_uploads(session_id, upload_ids)
+            await self.session.commit()
+            return None
         if updated is None:
             job.status = "failed"
-        elif job.status == "cancelled":
-            return None
         else:
             job.status = "completed"
         await self.session.commit()
@@ -1855,6 +1858,34 @@ class SqlSessionRepository:
                 doc.status = "uploaded"
         await self.session.commit()
         return await self._report_context_job_payload(job)
+
+    async def _reset_cancelled_report_context_uploads(
+        self, session_id: str, upload_ids: list[str]
+    ) -> None:
+        try:
+            session_pk = _decode_session_id(session_id)
+            upload_pks = [
+                _decode_report_upload_id(str(upload_id)) for upload_id in upload_ids
+            ]
+        except ValueError:
+            return
+        if not upload_pks:
+            return
+        stmt = select(TranscribeReportContextDocument).where(
+            TranscribeReportContextDocument.session_id == session_pk,
+            TranscribeReportContextDocument.id.in_(upload_pks),
+        )
+        documents = list((await self.session.scalars(stmt)).all())
+        if not documents:
+            return
+        document_ids = [document.id for document in documents]
+        await self.session.execute(
+            delete(TranscribeReportContextItem).where(
+                TranscribeReportContextItem.document_id.in_(document_ids)
+            )
+        )
+        for document in documents:
+            document.status = "uploaded"
 
     async def _load_session(
         self, session_id: str, doctor_id: str
