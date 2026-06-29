@@ -11,7 +11,12 @@ from fettle_backend.products.transcribe.schemas.auth import (
     PinLoginPinChangeRequiredResponse,
 )
 from fettle_backend.products.transcribe.schemas.common import DoctorProfile, ErrorResponse
-from fettle_backend.products.transcribe.services.tokens import issue_legacy_doctor_token, verify_legacy_doctor_token
+from fettle_backend.products.transcribe.services.tokens import (
+    issue_legacy_doctor_token,
+    issue_pin_change_token,
+    verify_legacy_doctor_token,
+    verify_pin_change_token,
+)
 
 
 class AuthService:
@@ -47,7 +52,11 @@ class AuthService:
         if doctor.must_change_pin:
             return PinLoginPinChangeRequiredResponse(
                 status="pin_change_required",
-                pinChangeToken=f"doctor:{doctor.profile.id}",
+                pinChangeToken=issue_pin_change_token(
+                    doctor.profile.id,
+                    doctor.token_version,
+                    self.settings.legacy_auth_secret,
+                ),
                 doctor=doctor.profile,
             )
         token = issue_legacy_doctor_token(doctor.profile.id, doctor.token_version, self.settings.legacy_auth_secret)
@@ -66,6 +75,13 @@ class AuthService:
             raise HTTPException(
                 status_code=404,
                 detail=ErrorResponse(message="Your session has expired. Please log in again.").model_dump(),
+            )
+        if payload.get("tokenVersion") != doctor.token_version:
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(
+                    message="Your session has expired. Please log in again."
+                ).model_dump(),
             )
         return AuthMeResponse(doctor=doctor.profile)
 
@@ -130,13 +146,30 @@ class AuthService:
         return doctor
 
     async def change_pin(self, pin_change_token: str, new_pin: str) -> LoginDoctorResponse:
-        if not pin_change_token.startswith("doctor:"):
-            raise HTTPException(status_code=401, detail=ErrorResponse(message="Invalid PIN change token.").model_dump())
-        doctor_id = pin_change_token.split(":", 1)[1]
+        payload = verify_pin_change_token(
+            pin_change_token, self.settings.legacy_auth_secret
+        )
+        if not payload:
+            raise HTTPException(
+                status_code=401,
+                detail=ErrorResponse(message="Invalid PIN change token.").model_dump(),
+            )
+        doctor_id = str(payload.get("doctorId", ""))
+        doctor_record = await self.repository.find_by_id(doctor_id)
+        if doctor_record is None or payload.get("tokenVersion") != doctor_record.token_version:
+            raise HTTPException(
+                status_code=401,
+                detail=ErrorResponse(message="Invalid PIN change token.").model_dump(),
+            )
         doctor = await self.repository.set_pin(doctor_id, new_pin)
         if not doctor:
-            raise HTTPException(status_code=404, detail=ErrorResponse(message="Doctor account not found.").model_dump())
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(message="Doctor account not found.").model_dump(),
+            )
         refreshed = await self.repository.find_by_id(doctor_id)
         token_version = refreshed.token_version if refreshed is not None else 0
-        token = issue_legacy_doctor_token(doctor.id, token_version, self.settings.legacy_auth_secret)
+        token = issue_legacy_doctor_token(
+            doctor.id, token_version, self.settings.legacy_auth_secret
+        )
         return LoginDoctorResponse(token=token, doctor=doctor)

@@ -99,3 +99,34 @@ def test_pin_change_flow_returns_authenticated_session(internal_admin_client) ->
     )
     assert relogin.status_code == 200
     assert relogin.json()["status"] == "authenticated"
+
+
+def test_pin_change_rejects_forged_token(client) -> None:
+    doctor = client.get("/doctors").json()["doctors"][0]
+    response = client.post(
+        "/auth/pin/change",
+        json={"pinChangeToken": f"doctor:{doctor['id']}", "newPin": "123456"},
+    )
+    assert response.status_code == 401
+
+
+def test_pin_reset_revokes_existing_session(internal_admin_client) -> None:
+    doctors = internal_admin_client.get("/doctors").json()["doctors"]
+    for doctor in doctors:
+        login = internal_admin_client.post(
+            "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+        )
+        if login.json().get("status") == "authenticated":
+            break
+    token = login.json()["token"]
+
+    reset = internal_admin_client.post(
+        f"/internal/admin/doctors/{doctor['id']}/pin-reset",
+        headers={"X-Internal-API-Key": "test-internal-key"},
+    )
+    assert reset.status_code == 200
+
+    me = internal_admin_client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert me.status_code == 404

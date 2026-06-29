@@ -474,6 +474,22 @@ async def start_report_context_extraction_job(
 
 
 @router.get(
+    "/sessions/{session_id}/report-context/jobs/active",
+    response_model=GetActiveReportContextExtractionJobResponse,
+    tags=["report-context"],
+)
+async def get_active_report_context_extraction_job(
+    session_id: str,
+    doctor=Depends(require_doctor),
+    session_service: SessionService = Depends(get_session_service),
+) -> GetActiveReportContextExtractionJobResponse:
+    job = await session_service.get_active_report_context_extraction_job(
+        session_id, doctor.id
+    )
+    return GetActiveReportContextExtractionJobResponse(job=job)
+
+
+@router.get(
     "/sessions/{session_id}/report-context/jobs/{job_id}",
     response_model=GetReportContextExtractionJobResponse,
     tags=["report-context"],
@@ -484,22 +500,10 @@ async def get_report_context_extraction_job(
     doctor=Depends(require_doctor),
     session_service: SessionService = Depends(get_session_service),
 ) -> GetReportContextExtractionJobResponse:
-    job = await session_service.get_report_context_extraction_job(session_id, job_id, doctor.id)
+    job = await session_service.get_report_context_extraction_job(
+        session_id, job_id, doctor.id
+    )
     return GetReportContextExtractionJobResponse(job=job)
-
-
-@router.get(
-    "/sessions/{session_id}/report-context/jobs/active",
-    response_model=GetActiveReportContextExtractionJobResponse,
-    tags=["report-context"],
-)
-async def get_active_report_context_extraction_job(
-    session_id: str,
-    doctor=Depends(require_doctor),
-    session_service: SessionService = Depends(get_session_service),
-) -> GetActiveReportContextExtractionJobResponse:
-    job = await session_service.get_active_report_context_extraction_job(session_id, doctor.id)
-    return GetActiveReportContextExtractionJobResponse(job=job)
 
 
 @router.get("/sessions/{session_id}/report-context/jobs/{job_id}/stream", tags=["report-context"])
