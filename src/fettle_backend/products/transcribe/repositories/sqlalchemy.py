@@ -1530,6 +1530,8 @@ class SqlSessionRepository:
         job = await self.session.get(Job, job_pk)
         if job is None or job.product != "transcribe" or job.job_type != "report_context_extract":
             return None
+        if job.status == "cancelled":
+            return None
         payload = json.loads(job.payload_json)
         session_id = str(payload["sessionId"])
         doctor_id = str(payload["doctorId"])
@@ -1537,6 +1539,8 @@ class SqlSessionRepository:
         updated = await self.extract_report_context(session_id, doctor_id, upload_ids)
         if updated is None:
             job.status = "failed"
+        elif job.status == "cancelled":
+            return None
         else:
             job.status = "completed"
         await self.session.commit()
