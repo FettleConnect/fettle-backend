@@ -3,7 +3,9 @@ from __future__ import annotations
 
 def _auth_headers(client):
     doctor = client.get("/doctors").json()["doctors"][0]
-    login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+    login = client.post(
+        "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+    )
     token = login.json()["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -57,7 +59,9 @@ def test_queue_status_transitions_and_repeated_intake_deduping(client) -> None:
     assert second.status_code == 201
     assert second.json()["entry"]["id"] == first.json()["entry"]["id"]
 
-    no_show = client.post(f"/queue/{first.json()['entry']['id']}/no-show", headers=headers)
+    no_show = client.post(
+        f"/queue/{first.json()['entry']['id']}/no-show", headers=headers
+    )
     assert no_show.status_code == 200
     assert no_show.json()["entry"]["status"] == "no_show"
 
@@ -70,7 +74,11 @@ def test_public_intake_profile_lookup_and_cancel_conflict(client) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Meera Nair", "patientPhoneNumber": "9999999992", "patientAge": 28},
+        json={
+            "patientName": "Meera Nair",
+            "patientPhoneNumber": "9999999992",
+            "patientAge": 28,
+        },
         headers=headers,
     ).json()["session"]
     assert session["patient"]["name"] == "Meera Nair"

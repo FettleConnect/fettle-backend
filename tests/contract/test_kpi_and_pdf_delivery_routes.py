@@ -12,13 +12,17 @@ from fettle_backend.app.main import create_app
 from fettle_backend.platform.db.session import SessionFactory
 from fettle_backend.platform.observability.service import ObservabilityService
 from fettle_backend.platform.storage.local import LocalStorage
-from fettle_backend.products.transcribe.repositories.sqlalchemy import SqlSessionRepository
+from fettle_backend.products.transcribe.repositories.sqlalchemy import (
+    SqlSessionRepository,
+)
 from fettle_backend.products.transcribe.services.pdf_delivery import PdfDeliveryService
 
 
 def _auth_headers(client):
     for doctor in client.get("/doctors").json()["doctors"]:
-        login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+        login = client.post(
+            "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+        )
         token = login.json().get("token")
         if token:
             return {"Authorization": f"Bearer {token}"}
@@ -34,13 +38,17 @@ async def _seed_kpi_events(events: list[tuple[str, str, dict]]) -> None:
 
 async def _process_pdf_delivery_jobs() -> list[dict]:
     async with SessionFactory() as session:
-        service = PdfDeliveryService(SqlSessionRepository(session), get_settings(), LocalStorage())
+        service = PdfDeliveryService(
+            SqlSessionRepository(session), get_settings(), LocalStorage()
+        )
         return await service.process_pending_jobs()
 
 
 async def _create_public_pdf_media_url(session_id: str, file_name: str) -> str:
     async with SessionFactory() as session:
-        service = PdfDeliveryService(SqlSessionRepository(session), get_settings(), LocalStorage())
+        service = PdfDeliveryService(
+            SqlSessionRepository(session), get_settings(), LocalStorage()
+        )
         return service.create_public_media_url(session_id, file_name)
 
 
@@ -87,7 +95,11 @@ def test_public_kpi_scorecard_and_filters(client) -> None:
     payload = scorecard.json()
     assert payload["generatedAt"]
     assert any(section["section"] == "auth" for section in payload["sections"])
-    assert any(metric["metric"] == "auth.pin_login" for section in payload["sections"] for metric in section["metrics"])
+    assert any(
+        metric["metric"] == "auth.pin_login"
+        for section in payload["sections"]
+        for metric in section["metrics"]
+    )
 
     focus = client.get("/public/kpi/scorecard?focus=1")
     assert focus.status_code == 200
@@ -96,30 +108,52 @@ def test_public_kpi_scorecard_and_filters(client) -> None:
     filtered = client.get("/public/kpi/scorecard?includeExpected=1&section=session")
     assert filtered.status_code == 200
     assert filtered.json()["sections"][0]["section"] == "session"
-    assert any(metric["metric"] == "session.transcription.end_to_end" for metric in filtered.json()["sections"][0]["metrics"])
+    assert any(
+        metric["metric"] == "session.transcription.end_to_end"
+        for metric in filtered.json()["sections"][0]["metrics"]
+    )
 
 
 def test_public_kpi_diagnostics_routes(client) -> None:
     asyncio.run(
         _seed_kpi_events(
             [
-                ("provider.gemini.health", "success", {"provider": "gemini-2.5-flash", "elapsedMs": 210}),
+                (
+                    "provider.gemini.health",
+                    "success",
+                    {"provider": "gemini-2.5-flash", "elapsedMs": 210},
+                ),
                 (
                     "provider.gemini.health",
                     "failure",
-                    {"provider": "gemini-2.5-flash", "elapsedMs": 900, "error": "Gemini transcription failed with status 503."},
+                    {
+                        "provider": "gemini-2.5-flash",
+                        "elapsedMs": 900,
+                        "error": "Gemini transcription failed with status 503.",
+                    },
                 ),
                 ("session.transcription.queue", "success", {"elapsedMs": 50}),
                 (
                     "session.transcription.provider_call",
                     "failure",
-                    {"elapsedMs": 1800, "error": "OpenAI transcription failed with status 500."},
+                    {
+                        "elapsedMs": 1800,
+                        "error": "OpenAI transcription failed with status 500.",
+                    },
                 ),
-                ("report_context.preprocess", "success", {"elapsedMs": 120, "unitCount": 3}),
+                (
+                    "report_context.preprocess",
+                    "success",
+                    {"elapsedMs": 120, "unitCount": 3},
+                ),
                 (
                     "report_context.fallback_path",
                     "success",
-                    {"provider": "gemini-2.5-flash-report-context", "operation": "extract_chunks", "fallbackUsed": False},
+                    {
+                        "provider": "gemini-2.5-flash-report-context",
+                        "operation": "extract_chunks",
+                        "fallbackUsed": False,
+                    },
                 ),
                 (
                     "report_context.fallback_path",
@@ -141,7 +175,10 @@ def test_public_kpi_diagnostics_routes(client) -> None:
 
     pipeline = client.get("/public/kpi/pipeline?window=today")
     assert pipeline.status_code == 200
-    assert any(stage["metric"] == "report_context.extract_parse" for stage in pipeline.json()["stages"])
+    assert any(
+        stage["metric"] == "report_context.extract_parse"
+        for stage in pipeline.json()["stages"]
+    )
 
     fallback = client.get("/public/kpi/report-context-fallback?window=today")
     assert fallback.status_code == 200
@@ -152,36 +189,66 @@ def test_public_kpi_diagnostics_routes(client) -> None:
     assert trends.json()["points"][0]["totalEvents"] >= 1
 
 
-def test_internal_reliability_and_pdf_delivery_disabled_routes(internal_admin_client) -> None:
-    asyncio.run(_seed_kpi_events([("session.transcription.end_to_end", "failure", {"elapsedMs": 1500})]))
+def test_internal_reliability_and_pdf_delivery_disabled_routes(
+    internal_admin_client,
+) -> None:
+    asyncio.run(
+        _seed_kpi_events(
+            [("session.transcription.end_to_end", "failure", {"elapsedMs": 1500})]
+        )
+    )
 
-    alerts = internal_admin_client.get("/internal/admin/reliability/alerts", headers=_admin_headers())
+    alerts = internal_admin_client.get(
+        "/internal/admin/reliability/alerts", headers=_admin_headers()
+    )
     assert alerts.status_code == 200
-    assert any(alert["metric"] == "session.transcription.end_to_end" for alert in alerts.json()["alerts"])
+    assert any(
+        alert["metric"] == "session.transcription.end_to_end"
+        for alert in alerts.json()["alerts"]
+    )
 
-    sync_dry_run = internal_admin_client.post("/internal/admin/fettle-sync/dry-run", headers=_admin_headers())
+    sync_dry_run = internal_admin_client.post(
+        "/internal/admin/fettle-sync/dry-run", headers=_admin_headers()
+    )
     assert sync_dry_run.status_code == 409
     assert "Fettle sync is not configured" in sync_dry_run.json()["error"]
 
-    pdf_job = internal_admin_client.get("/internal/admin/pdf-delivery/jobs/123", headers=_admin_headers())
+    pdf_job = internal_admin_client.get(
+        "/internal/admin/pdf-delivery/jobs/123", headers=_admin_headers()
+    )
     assert pdf_job.status_code == 404
     assert "PDF delivery job was not found" in pdf_job.json()["error"]
 
 
-def test_internal_fettle_sync_enabled_dry_run_and_session_enqueue(fettle_sync_admin_client) -> None:
-    dry_run = fettle_sync_admin_client.post("/internal/admin/fettle-sync/dry-run", headers=_admin_headers())
+def test_internal_fettle_sync_enabled_dry_run_and_session_enqueue(
+    fettle_sync_admin_client,
+) -> None:
+    dry_run = fettle_sync_admin_client.post(
+        "/internal/admin/fettle-sync/dry-run", headers=_admin_headers()
+    )
     assert dry_run.status_code == 202
     assert dry_run.json()["job"]["trigger"] == "dry_run"
-    assert dry_run.json()["result"] == {"processed": 1, "succeeded": 1, "failed": 0, "deadLetter": 0}
+    assert dry_run.json()["result"] == {
+        "processed": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "deadLetter": 0,
+    }
 
-    replay_missing = fettle_sync_admin_client.post("/internal/admin/fettle-sync/jobs/99999/replay", headers=_admin_headers())
+    replay_missing = fettle_sync_admin_client.post(
+        "/internal/admin/fettle-sync/jobs/99999/replay", headers=_admin_headers()
+    )
     assert replay_missing.status_code == 404
     assert "Dead-letter sync job was not found" in replay_missing.json()["error"]
 
     headers = _auth_headers(fettle_sync_admin_client)
     session = fettle_sync_admin_client.post(
         "/sessions",
-        json={"patientName": "Kiran Rao", "patientPhoneNumber": "9000000001", "patientAge": 37},
+        json={
+            "patientName": "Kiran Rao",
+            "patientPhoneNumber": "9000000001",
+            "patientAge": 37,
+        },
         headers=headers,
     ).json()["session"]
     fettle_sync_admin_client.post(
@@ -201,31 +268,49 @@ def test_internal_fettle_sync_enabled_dry_run_and_session_enqueue(fettle_sync_ad
     import time
 
     for _ in range(10):
-        current = fettle_sync_admin_client.get(f"/sessions/{session['id']}", headers=headers).json()["session"]
+        current = fettle_sync_admin_client.get(
+            f"/sessions/{session['id']}", headers=headers
+        ).json()["session"]
         if current["transcription"]["status"] == "completed":
             break
         time.sleep(0.05)
 
-    queued_jobs = fettle_sync_admin_client.get("/internal/admin/fettle-sync/jobs?status=queued", headers=_admin_headers())
+    queued_jobs = fettle_sync_admin_client.get(
+        "/internal/admin/fettle-sync/jobs?status=queued", headers=_admin_headers()
+    )
     assert queued_jobs.status_code == 200
-    assert any(job["sessionId"] == session["id"] and job["trigger"] == "transcription_completed" for job in queued_jobs.json()["jobs"])
+    assert any(
+        job["sessionId"] == session["id"]
+        and job["trigger"] == "transcription_completed"
+        for job in queued_jobs.json()["jobs"]
+    )
 
-    stats = fettle_sync_admin_client.get("/internal/admin/fettle-sync/stats", headers=_admin_headers())
+    stats = fettle_sync_admin_client.get(
+        "/internal/admin/fettle-sync/stats", headers=_admin_headers()
+    )
     assert stats.status_code == 200
     assert stats.json()["enabled"] is True
     assert stats.json()["succeeded"] >= 1
     assert stats.json()["queued"] >= 1
 
 
-def test_session_pdf_delivery_settings_jobs_webhook_and_public_media(client, internal_admin_client) -> None:
+def test_session_pdf_delivery_settings_jobs_webhook_and_public_media(
+    client, internal_admin_client
+) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Anita Sharma", "patientPhoneNumber": "9876543210", "patientAge": 32},
+        json={
+            "patientName": "Anita Sharma",
+            "patientPhoneNumber": "9876543210",
+            "patientAge": 32,
+        },
         headers=headers,
     ).json()["session"]
 
-    default_delivery = client.get(f"/sessions/{session['id']}/pdf-delivery", headers=headers)
+    default_delivery = client.get(
+        f"/sessions/{session['id']}/pdf-delivery", headers=headers
+    )
     assert default_delivery.status_code == 200
     assert default_delivery.json()["delivery"]["settings"]["patientEnabled"] is True
     assert default_delivery.json()["delivery"]["settings"]["pharmacyEnabled"] is False
@@ -266,7 +351,9 @@ def test_session_pdf_delivery_settings_jobs_webhook_and_public_media(client, int
     import time
 
     for _ in range(10):
-        current = client.get(f"/sessions/{session['id']}", headers=headers).json()["session"]
+        current = client.get(f"/sessions/{session['id']}", headers=headers).json()[
+            "session"
+        ]
         if current["transcription"]["status"] == "completed":
             break
         time.sleep(0.05)
@@ -305,7 +392,9 @@ def test_session_pdf_delivery_settings_jobs_webhook_and_public_media(client, int
     assert job_detail.status_code == 200
     assert job_detail.json()["job"]["status"] == "delivered"
 
-    media_url = asyncio.run(_create_public_pdf_media_url(session["id"], artifact["fileName"]))
+    media_url = asyncio.run(
+        _create_public_pdf_media_url(session["id"], artifact["fileName"])
+    )
     parsed_media_url = urlparse(media_url)
     token = parse_qs(parsed_media_url.query)["token"][0]
 

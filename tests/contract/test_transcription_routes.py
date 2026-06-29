@@ -5,7 +5,9 @@ import time
 
 def _auth_headers(client):
     doctor = client.get("/doctors").json()["doctors"][0]
-    login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+    login = client.post(
+        "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+    )
     token = login.json()["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -14,7 +16,11 @@ def test_upload_audio_persists_metadata_and_returns_session(client) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Maya", "patientPhoneNumber": "7777777777", "patientAge": 40},
+        json={
+            "patientName": "Maya",
+            "patientPhoneNumber": "7777777777",
+            "patientAge": 40,
+        },
         headers=headers,
     ).json()["session"]
 
@@ -35,11 +41,17 @@ def test_upload_audio_persists_metadata_and_returns_session(client) -> None:
     assert body["audioArtifact"]["mimeType"] == "audio/webm"
 
 
-def test_submit_transcription_requires_audio_and_then_returns_processing(client) -> None:
+def test_submit_transcription_requires_audio_and_then_returns_processing(
+    client,
+) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Vikram", "patientPhoneNumber": "6666666666", "patientAge": 34},
+        json={
+            "patientName": "Vikram",
+            "patientPhoneNumber": "6666666666",
+            "patientAge": 34,
+        },
         headers=headers,
     ).json()["session"]
 
@@ -84,7 +96,11 @@ def test_update_draft_document_persists_document(client) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Leela", "patientPhoneNumber": "5555555555", "patientAge": 29},
+        json={
+            "patientName": "Leela",
+            "patientPhoneNumber": "5555555555",
+            "patientAge": 29,
+        },
         headers=headers,
     ).json()["session"]
 
@@ -110,7 +126,11 @@ def test_generate_pdf_and_download_artifacts(client) -> None:
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Kiran", "patientPhoneNumber": "4444444444", "patientAge": 31},
+        json={
+            "patientName": "Kiran",
+            "patientPhoneNumber": "4444444444",
+            "patientAge": 31,
+        },
         headers=headers,
     ).json()["session"]
 
@@ -130,15 +150,21 @@ def test_generate_pdf_and_download_artifacts(client) -> None:
     )
     for _ in range(10):
         time.sleep(0.05)
-        current = client.get(f"/sessions/{session['id']}", headers=headers).json()["session"]
+        current = client.get(f"/sessions/{session['id']}", headers=headers).json()[
+            "session"
+        ]
         if current["transcription"]["status"] == "completed":
             break
 
     generated = client.post(f"/sessions/{session['id']}/pdf", headers=headers)
     assert generated.status_code == 200
-    assert generated.json()["session"]["documentArtifact"]["mimeType"] == "application/pdf"
+    assert (
+        generated.json()["session"]["documentArtifact"]["mimeType"] == "application/pdf"
+    )
 
-    transcript = client.get(f"/sessions/{session['id']}/artifacts/transcript", headers=headers)
+    transcript = client.get(
+        f"/sessions/{session['id']}/artifacts/transcript", headers=headers
+    )
     assert transcript.status_code == 200
     assert transcript.headers["content-type"].startswith("application/pdf")
 

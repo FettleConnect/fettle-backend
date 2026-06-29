@@ -103,9 +103,13 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_kpi_events_metric_key", "kpi_events", ["metric_key"], unique=False)
+    op.create_index(
+        "ix_kpi_events_metric_key", "kpi_events", ["metric_key"], unique=False
+    )
     op.create_index("ix_kpi_events_section", "kpi_events", ["section"], unique=False)
-    op.create_index("ix_kpi_events_created_at", "kpi_events", ["created_at"], unique=False)
+    op.create_index(
+        "ix_kpi_events_created_at", "kpi_events", ["created_at"], unique=False
+    )
 
     op.create_table(
         "transcribe_doctors",
@@ -123,10 +127,19 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.Column("pin_code", sa.String(length=16), nullable=False, server_default="123456"),
+        sa.Column(
+            "pin_code", sa.String(length=16), nullable=False, server_default="123456"
+        ),
         sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("must_change_pin", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "must_change_pin",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+        sa.Column(
+            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -139,8 +152,18 @@ def upgrade() -> None:
             name="uq_transcribe_doctor_public_slug",
         ),
     )
-    op.create_index("ix_transcribe_doctors_department_slug", "transcribe_doctors", ["department_slug"], unique=False)
-    op.create_index("ix_transcribe_doctors_doctor_name_slug", "transcribe_doctors", ["doctor_name_slug"], unique=False)
+    op.create_index(
+        "ix_transcribe_doctors_department_slug",
+        "transcribe_doctors",
+        ["department_slug"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_doctors_doctor_name_slug",
+        "transcribe_doctors",
+        ["doctor_name_slug"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_intake_links",
@@ -151,9 +174,16 @@ def upgrade() -> None:
             sa.ForeignKey("transcribe_doctors.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("label", sa.String(length=255), nullable=False, server_default="Clinic Queue"),
+        sa.Column(
+            "label",
+            sa.String(length=255),
+            nullable=False,
+            server_default="Clinic Queue",
+        ),
         sa.Column("token", sa.String(length=255), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -167,7 +197,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_intake_links_token", "transcribe_intake_links", ["token"], unique=True)
+    op.create_index(
+        "ix_transcribe_intake_links_token",
+        "transcribe_intake_links",
+        ["token"],
+        unique=True,
+    )
 
     op.create_table(
         "transcribe_sessions",
@@ -181,8 +216,12 @@ def upgrade() -> None:
         sa.Column("patient_name", sa.String(length=255), nullable=True),
         sa.Column("patient_phone_number", sa.String(length=32), nullable=True),
         sa.Column("patient_age", sa.Integer(), nullable=True),
-        sa.Column("case_status", sa.String(length=32), nullable=False, server_default="open"),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="draft"),
+        sa.Column(
+            "case_status", sa.String(length=32), nullable=False, server_default="open"
+        ),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="draft"
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -196,11 +235,33 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_sessions_doctor_id", "transcribe_sessions", ["doctor_id"], unique=False)
-    op.create_index("ix_transcribe_sessions_patient_phone_number", "transcribe_sessions", ["patient_phone_number"], unique=False)
-    op.create_index("ix_transcribe_sessions_case_status", "transcribe_sessions", ["case_status"], unique=False)
-    op.create_index("ix_transcribe_sessions_status", "transcribe_sessions", ["status"], unique=False)
-    op.create_index("ix_transcribe_sessions_created_at", "transcribe_sessions", ["created_at"], unique=False)
+    op.create_index(
+        "ix_transcribe_sessions_doctor_id",
+        "transcribe_sessions",
+        ["doctor_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sessions_patient_phone_number",
+        "transcribe_sessions",
+        ["patient_phone_number"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sessions_case_status",
+        "transcribe_sessions",
+        ["case_status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sessions_status", "transcribe_sessions", ["status"], unique=False
+    )
+    op.create_index(
+        "ix_transcribe_sessions_created_at",
+        "transcribe_sessions",
+        ["created_at"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_session_audio",
@@ -226,7 +287,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_session_audio_session_id", "transcribe_session_audio", ["session_id"], unique=False)
+    op.create_index(
+        "ix_transcribe_session_audio_session_id",
+        "transcribe_session_audio",
+        ["session_id"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_transcriptions",
@@ -243,7 +309,9 @@ def upgrade() -> None:
             sa.ForeignKey("jobs.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="pending"),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="pending"
+        ),
         sa.Column("provider_name", sa.String(length=128), nullable=True),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("transcript_text", sa.Text(), nullable=True),
@@ -251,7 +319,12 @@ def upgrade() -> None:
         sa.Column("metadata_json", sa.Text(), nullable=True),
         sa.Column("stage", sa.String(length=128), nullable=True),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("requires_recovery", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "requires_recovery",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
         sa.Column("idempotency_key", sa.String(length=255), nullable=True),
         sa.Column(
             "created_at",
@@ -267,8 +340,18 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("session_id"),
     )
-    op.create_index("ix_transcribe_transcriptions_status", "transcribe_transcriptions", ["status"], unique=False)
-    op.create_index("ix_transcribe_transcriptions_idempotency_key", "transcribe_transcriptions", ["idempotency_key"], unique=False)
+    op.create_index(
+        "ix_transcribe_transcriptions_status",
+        "transcribe_transcriptions",
+        ["status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_transcriptions_idempotency_key",
+        "transcribe_transcriptions",
+        ["idempotency_key"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_draft_documents",
@@ -310,7 +393,9 @@ def upgrade() -> None:
             sa.ForeignKey("jobs.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="pending"),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="pending"
+        ),
         sa.Column("page_count", sa.Integer(), nullable=True),
         sa.Column(
             "created_at",
@@ -368,10 +453,22 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.UniqueConstraint("session_id", "artifact_type", name="uq_transcribe_session_artifact_type"),
+        sa.UniqueConstraint(
+            "session_id", "artifact_type", name="uq_transcribe_session_artifact_type"
+        ),
     )
-    op.create_index("ix_transcribe_artifacts_session_id", "transcribe_artifacts", ["session_id"], unique=False)
-    op.create_index("ix_transcribe_artifacts_artifact_type", "transcribe_artifacts", ["artifact_type"], unique=False)
+    op.create_index(
+        "ix_transcribe_artifacts_session_id",
+        "transcribe_artifacts",
+        ["session_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_artifacts_artifact_type",
+        "transcribe_artifacts",
+        ["artifact_type"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_pdf_delivery_jobs",
@@ -389,10 +486,21 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("destination", sa.String(length=255), nullable=False),
-        sa.Column("recipient_type", sa.String(length=32), nullable=False, server_default="patient"),
-        sa.Column("recipient_name", sa.String(length=255), nullable=False, server_default=""),
-        sa.Column("phone_number", sa.String(length=32), nullable=False, server_default=""),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="pending"),
+        sa.Column(
+            "recipient_type",
+            sa.String(length=32),
+            nullable=False,
+            server_default="patient",
+        ),
+        sa.Column(
+            "recipient_name", sa.String(length=255), nullable=False, server_default=""
+        ),
+        sa.Column(
+            "phone_number", sa.String(length=32), nullable=False, server_default=""
+        ),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="pending"
+        ),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("provider", sa.String(length=128), nullable=True),
         sa.Column("provider_message_id", sa.String(length=255), nullable=True),
@@ -411,10 +519,30 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_pdf_delivery_jobs_session_id", "transcribe_pdf_delivery_jobs", ["session_id"], unique=False)
-    op.create_index("ix_transcribe_pdf_delivery_jobs_status", "transcribe_pdf_delivery_jobs", ["status"], unique=False)
-    op.create_index("ix_transcribe_pdf_delivery_jobs_recipient_type", "transcribe_pdf_delivery_jobs", ["recipient_type"], unique=False)
-    op.create_index("ix_transcribe_pdf_delivery_jobs_provider_message_id", "transcribe_pdf_delivery_jobs", ["provider_message_id"], unique=False)
+    op.create_index(
+        "ix_transcribe_pdf_delivery_jobs_session_id",
+        "transcribe_pdf_delivery_jobs",
+        ["session_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_pdf_delivery_jobs_status",
+        "transcribe_pdf_delivery_jobs",
+        ["status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_pdf_delivery_jobs_recipient_type",
+        "transcribe_pdf_delivery_jobs",
+        ["recipient_type"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_pdf_delivery_jobs_provider_message_id",
+        "transcribe_pdf_delivery_jobs",
+        ["provider_message_id"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_pdf_delivery_settings",
@@ -425,8 +553,18 @@ def upgrade() -> None:
             sa.ForeignKey("transcribe_sessions.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("patient_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("pharmacy_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "patient_enabled",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("true"),
+        ),
+        sa.Column(
+            "pharmacy_enabled",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
         sa.Column("pharmacy_name", sa.String(length=255), nullable=True),
         sa.Column("pharmacy_phone_number", sa.String(length=32), nullable=True),
         sa.Column(
@@ -436,7 +574,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_pdf_delivery_settings_session_id", "transcribe_pdf_delivery_settings", ["session_id"], unique=True)
+    op.create_index(
+        "ix_transcribe_pdf_delivery_settings_session_id",
+        "transcribe_pdf_delivery_settings",
+        ["session_id"],
+        unique=True,
+    )
 
     op.create_table(
         "transcribe_queue_entries",
@@ -453,11 +596,18 @@ def upgrade() -> None:
             sa.ForeignKey("transcribe_intake_links.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("intake_label", sa.String(length=255), nullable=False, server_default="Clinic Queue"),
+        sa.Column(
+            "intake_label",
+            sa.String(length=255),
+            nullable=False,
+            server_default="Clinic Queue",
+        ),
         sa.Column("patient_name", sa.String(length=255), nullable=False),
         sa.Column("patient_phone_number", sa.String(length=32), nullable=True),
         sa.Column("patient_age", sa.Integer(), nullable=True),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="waiting"),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="waiting"
+        ),
         sa.Column("source", sa.String(length=32), nullable=False, server_default="qr"),
         sa.Column(
             "submitted_at",
@@ -485,9 +635,24 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_queue_entries_doctor_id", "transcribe_queue_entries", ["doctor_id"], unique=False)
-    op.create_index("ix_transcribe_queue_entries_intake_link_id", "transcribe_queue_entries", ["intake_link_id"], unique=False)
-    op.create_index("ix_transcribe_queue_entries_status", "transcribe_queue_entries", ["status"], unique=False)
+    op.create_index(
+        "ix_transcribe_queue_entries_doctor_id",
+        "transcribe_queue_entries",
+        ["doctor_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_queue_entries_intake_link_id",
+        "transcribe_queue_entries",
+        ["intake_link_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_queue_entries_status",
+        "transcribe_queue_entries",
+        ["status"],
+        unique=False,
+    )
 
     op.create_table(
         "transcribe_sync_jobs",
@@ -504,11 +669,28 @@ def upgrade() -> None:
             sa.ForeignKey("jobs.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("status", sa.String(length=64), nullable=False, server_default="disabled"),
-        sa.Column("target_system", sa.String(length=128), nullable=False, server_default="fettle_connect"),
-        sa.Column("trigger", sa.String(length=64), nullable=False, server_default="transcription_completed"),
+        sa.Column(
+            "status", sa.String(length=64), nullable=False, server_default="disabled"
+        ),
+        sa.Column(
+            "target_system",
+            sa.String(length=128),
+            nullable=False,
+            server_default="fettle_connect",
+        ),
+        sa.Column(
+            "trigger",
+            sa.String(length=64),
+            nullable=False,
+            server_default="transcription_completed",
+        ),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
-        sa.Column("external_session_id", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column(
+            "external_session_id",
+            sa.String(length=255),
+            nullable=False,
+            server_default="",
+        ),
         sa.Column("payload_json", sa.Text(), nullable=False, server_default="{}"),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("max_attempts", sa.Integer(), nullable=False, server_default="10"),
@@ -540,65 +722,145 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index("ix_transcribe_sync_jobs_session_id", "transcribe_sync_jobs", ["session_id"], unique=False)
-    op.create_index("ix_transcribe_sync_jobs_status", "transcribe_sync_jobs", ["status"], unique=False)
-    op.create_index("ix_transcribe_sync_jobs_trigger", "transcribe_sync_jobs", ["trigger"], unique=False)
-    op.create_index("ix_transcribe_sync_jobs_idempotency_key", "transcribe_sync_jobs", ["idempotency_key"], unique=True)
-    op.create_index("ix_transcribe_sync_jobs_next_attempt_at", "transcribe_sync_jobs", ["next_attempt_at"], unique=False)
+    op.create_index(
+        "ix_transcribe_sync_jobs_session_id",
+        "transcribe_sync_jobs",
+        ["session_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sync_jobs_status",
+        "transcribe_sync_jobs",
+        ["status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sync_jobs_trigger",
+        "transcribe_sync_jobs",
+        ["trigger"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_transcribe_sync_jobs_idempotency_key",
+        "transcribe_sync_jobs",
+        ["idempotency_key"],
+        unique=True,
+    )
+    op.create_index(
+        "ix_transcribe_sync_jobs_next_attempt_at",
+        "transcribe_sync_jobs",
+        ["next_attempt_at"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_transcribe_sync_jobs_next_attempt_at", table_name="transcribe_sync_jobs")
-    op.drop_index("ix_transcribe_sync_jobs_idempotency_key", table_name="transcribe_sync_jobs")
+    op.drop_index(
+        "ix_transcribe_sync_jobs_next_attempt_at", table_name="transcribe_sync_jobs"
+    )
+    op.drop_index(
+        "ix_transcribe_sync_jobs_idempotency_key", table_name="transcribe_sync_jobs"
+    )
     op.drop_index("ix_transcribe_sync_jobs_trigger", table_name="transcribe_sync_jobs")
     op.drop_index("ix_transcribe_sync_jobs_status", table_name="transcribe_sync_jobs")
-    op.drop_index("ix_transcribe_sync_jobs_session_id", table_name="transcribe_sync_jobs")
+    op.drop_index(
+        "ix_transcribe_sync_jobs_session_id", table_name="transcribe_sync_jobs"
+    )
     op.drop_table("transcribe_sync_jobs")
 
-    op.drop_index("ix_transcribe_queue_entries_status", table_name="transcribe_queue_entries")
-    op.drop_index("ix_transcribe_queue_entries_intake_link_id", table_name="transcribe_queue_entries")
-    op.drop_index("ix_transcribe_queue_entries_doctor_id", table_name="transcribe_queue_entries")
+    op.drop_index(
+        "ix_transcribe_queue_entries_status", table_name="transcribe_queue_entries"
+    )
+    op.drop_index(
+        "ix_transcribe_queue_entries_intake_link_id",
+        table_name="transcribe_queue_entries",
+    )
+    op.drop_index(
+        "ix_transcribe_queue_entries_doctor_id", table_name="transcribe_queue_entries"
+    )
     op.drop_table("transcribe_queue_entries")
 
-    op.drop_index("ix_transcribe_pdf_delivery_settings_session_id", table_name="transcribe_pdf_delivery_settings")
+    op.drop_index(
+        "ix_transcribe_pdf_delivery_settings_session_id",
+        table_name="transcribe_pdf_delivery_settings",
+    )
     op.drop_table("transcribe_pdf_delivery_settings")
 
-    op.drop_index("ix_transcribe_pdf_delivery_jobs_provider_message_id", table_name="transcribe_pdf_delivery_jobs")
-    op.drop_index("ix_transcribe_pdf_delivery_jobs_recipient_type", table_name="transcribe_pdf_delivery_jobs")
-    op.drop_index("ix_transcribe_pdf_delivery_jobs_status", table_name="transcribe_pdf_delivery_jobs")
-    op.drop_index("ix_transcribe_pdf_delivery_jobs_session_id", table_name="transcribe_pdf_delivery_jobs")
+    op.drop_index(
+        "ix_transcribe_pdf_delivery_jobs_provider_message_id",
+        table_name="transcribe_pdf_delivery_jobs",
+    )
+    op.drop_index(
+        "ix_transcribe_pdf_delivery_jobs_recipient_type",
+        table_name="transcribe_pdf_delivery_jobs",
+    )
+    op.drop_index(
+        "ix_transcribe_pdf_delivery_jobs_status",
+        table_name="transcribe_pdf_delivery_jobs",
+    )
+    op.drop_index(
+        "ix_transcribe_pdf_delivery_jobs_session_id",
+        table_name="transcribe_pdf_delivery_jobs",
+    )
     op.drop_table("transcribe_pdf_delivery_jobs")
 
-    op.drop_index("ix_transcribe_artifacts_artifact_type", table_name="transcribe_artifacts")
-    op.drop_index("ix_transcribe_artifacts_session_id", table_name="transcribe_artifacts")
+    op.drop_index(
+        "ix_transcribe_artifacts_artifact_type", table_name="transcribe_artifacts"
+    )
+    op.drop_index(
+        "ix_transcribe_artifacts_session_id", table_name="transcribe_artifacts"
+    )
     op.drop_table("transcribe_artifacts")
 
     op.drop_table("transcribe_report_context_items")
-    op.drop_index("ix_transcribe_report_context_documents_status", table_name="transcribe_report_context_documents")
-    op.drop_index("ix_transcribe_report_context_documents_session_id", table_name="transcribe_report_context_documents")
+    op.drop_index(
+        "ix_transcribe_report_context_documents_status",
+        table_name="transcribe_report_context_documents",
+    )
+    op.drop_index(
+        "ix_transcribe_report_context_documents_session_id",
+        table_name="transcribe_report_context_documents",
+    )
     op.drop_table("transcribe_report_context_documents")
 
     op.drop_table("transcribe_draft_documents")
 
-    op.drop_index("ix_transcribe_transcriptions_idempotency_key", table_name="transcribe_transcriptions")
-    op.drop_index("ix_transcribe_transcriptions_status", table_name="transcribe_transcriptions")
+    op.drop_index(
+        "ix_transcribe_transcriptions_idempotency_key",
+        table_name="transcribe_transcriptions",
+    )
+    op.drop_index(
+        "ix_transcribe_transcriptions_status", table_name="transcribe_transcriptions"
+    )
     op.drop_table("transcribe_transcriptions")
 
-    op.drop_index("ix_transcribe_session_audio_session_id", table_name="transcribe_session_audio")
+    op.drop_index(
+        "ix_transcribe_session_audio_session_id", table_name="transcribe_session_audio"
+    )
     op.drop_table("transcribe_session_audio")
 
     op.drop_index("ix_transcribe_sessions_created_at", table_name="transcribe_sessions")
     op.drop_index("ix_transcribe_sessions_status", table_name="transcribe_sessions")
-    op.drop_index("ix_transcribe_sessions_case_status", table_name="transcribe_sessions")
-    op.drop_index("ix_transcribe_sessions_patient_phone_number", table_name="transcribe_sessions")
+    op.drop_index(
+        "ix_transcribe_sessions_case_status", table_name="transcribe_sessions"
+    )
+    op.drop_index(
+        "ix_transcribe_sessions_patient_phone_number", table_name="transcribe_sessions"
+    )
     op.drop_index("ix_transcribe_sessions_doctor_id", table_name="transcribe_sessions")
     op.drop_table("transcribe_sessions")
 
-    op.drop_index("ix_transcribe_intake_links_token", table_name="transcribe_intake_links")
+    op.drop_index(
+        "ix_transcribe_intake_links_token", table_name="transcribe_intake_links"
+    )
     op.drop_table("transcribe_intake_links")
 
-    op.drop_index("ix_transcribe_doctors_doctor_name_slug", table_name="transcribe_doctors")
-    op.drop_index("ix_transcribe_doctors_department_slug", table_name="transcribe_doctors")
+    op.drop_index(
+        "ix_transcribe_doctors_doctor_name_slug", table_name="transcribe_doctors"
+    )
+    op.drop_index(
+        "ix_transcribe_doctors_department_slug", table_name="transcribe_doctors"
+    )
     op.drop_table("transcribe_doctors")
 
     op.drop_index("ix_kpi_events_created_at", table_name="kpi_events")

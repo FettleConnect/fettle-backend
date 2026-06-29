@@ -5,7 +5,9 @@ import time
 
 def _auth_headers(client):
     doctor = client.get("/doctors").json()["doctors"][0]
-    login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+    login = client.post(
+        "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+    )
     token = login.json()["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -14,7 +16,11 @@ def _create_completed_session(client):
     headers = _auth_headers(client)
     session = client.post(
         "/sessions",
-        json={"patientName": "Nisha", "patientPhoneNumber": "3333333333", "patientAge": 36},
+        json={
+            "patientName": "Nisha",
+            "patientPhoneNumber": "3333333333",
+            "patientAge": 36,
+        },
         headers=headers,
     ).json()["session"]
     client.post(
@@ -33,7 +39,9 @@ def _create_completed_session(client):
     )
     for _ in range(10):
         time.sleep(0.05)
-        current = client.get(f"/sessions/{session['id']}", headers=headers).json()["session"]
+        current = client.get(f"/sessions/{session['id']}", headers=headers).json()[
+            "session"
+        ]
         if current["transcription"]["status"] == "completed":
             return headers, current
     raise AssertionError("transcription did not complete")
@@ -56,7 +64,9 @@ def test_upload_and_list_report_context_files(client) -> None:
     assert upload["fileName"] == "lab-report.pdf"
     assert upload["mimeType"] == "application/pdf"
 
-    listed = client.get(f"/sessions/{session['id']}/report-context/uploads", headers=headers)
+    listed = client.get(
+        f"/sessions/{session['id']}/report-context/uploads", headers=headers
+    )
     assert listed.status_code == 200
     uploads = listed.json()["uploads"]
     assert len(uploads) == 1
@@ -94,7 +104,10 @@ def test_extract_report_context_returns_ready_session(client) -> None:
     assert report_context["status"] == "ready"
     assert report_context["extractedUploadIds"] == [upload["id"]]
     assert len(report_context["chunks"]) == 1
-    assert "Imported scanned report image 'scan.png'" in report_context["chunks"][0]["text"]
+    assert (
+        "Imported scanned report image 'scan.png'"
+        in report_context["chunks"][0]["text"]
+    )
 
 
 def test_extract_report_context_async_job_completes(client) -> None:
@@ -156,7 +169,9 @@ def test_report_context_upload_delete_and_job_controls(client) -> None:
     )
     assert deleted.status_code == 204
 
-    listed = client.get(f"/sessions/{session['id']}/report-context/uploads", headers=headers)
+    listed = client.get(
+        f"/sessions/{session['id']}/report-context/uploads", headers=headers
+    )
     assert listed.status_code == 200
     assert listed.json()["uploads"] == []
 
@@ -222,7 +237,10 @@ def test_report_context_suggestions_and_apply_update_draft_document(client) -> N
     assert suggested.status_code == 200
     suggestion = suggested.json()
     assert suggestion["chunkIds"] == [chunk_id]
-    assert "Imported scanned report image 'suggest.webp'" in suggestion["draftDocument"]["clinicalSummary"]
+    assert (
+        "Imported scanned report image 'suggest.webp'"
+        in suggestion["draftDocument"]["clinicalSummary"]
+    )
     assert "Extra note from doctor." in suggestion["draftDocument"]["clinicalSummary"]
 
     applied = client.post(

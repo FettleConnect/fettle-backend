@@ -33,7 +33,15 @@ async def internal_health_check(
             "authenticated": True,
             "authenticationMethod": actor["authenticationMethod"],
             **({"caller": actor["caller"]} if actor.get("caller") else {}),
-            **({"adminUserId": actor["adminUserId"]} if actor.get("adminUserId") else {}),
-            **({"adminUserEmail": actor["adminUserEmail"]} if actor.get("adminUserEmail") else {}),
+            **(
+                {"adminUserId": actor["adminUserId"]}
+                if actor.get("adminUserId")
+                else {}
+            ),
+            **(
+                {"adminUserEmail": actor["adminUserEmail"]}
+                if actor.get("adminUserEmail")
+                else {}
+            ),
         },
     }

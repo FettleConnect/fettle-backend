@@ -12,7 +12,9 @@ from fettle_backend.app.main import create_app
 
 def _auth_headers(client):
     for doctor in client.get("/doctors").json()["doctors"]:
-        login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+        login = client.post(
+            "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+        )
         body = login.json()
         token = body.get("token")
         if token:
@@ -44,11 +46,15 @@ def test_internal_admin_doctor_create_list_and_detail(internal_admin_client) -> 
     assert created.status_code == 201
     doctor = created.json()["doctor"]
 
-    listed = internal_admin_client.get("/internal/admin/doctors", headers=_admin_headers())
+    listed = internal_admin_client.get(
+        "/internal/admin/doctors", headers=_admin_headers()
+    )
     assert listed.status_code == 200
     assert any(item["id"] == doctor["id"] for item in listed.json()["doctors"])
 
-    detail = internal_admin_client.get(f"/internal/admin/doctors/{doctor['id']}", headers=_admin_headers())
+    detail = internal_admin_client.get(
+        f"/internal/admin/doctors/{doctor['id']}", headers=_admin_headers()
+    )
     assert detail.status_code == 200
     assert detail.json()["doctor"]["name"] == name
     assert "pinHash" not in detail.json()["doctor"]
@@ -57,13 +63,19 @@ def test_internal_admin_doctor_create_list_and_detail(internal_admin_client) -> 
 
 def test_internal_admin_queue_listing_and_acceptance(internal_admin_client) -> None:
     doctor_headers = _auth_headers(internal_admin_client)
-    intake_link = internal_admin_client.get("/intake-link", headers=doctor_headers).json()["intakeLink"]
+    intake_link = internal_admin_client.get(
+        "/intake-link", headers=doctor_headers
+    ).json()["intakeLink"]
     created = internal_admin_client.post(
         f"/public/intake/{intake_link['token']}",
-        json={"patient": {"name": "Ravi Kumar", "phoneNumber": "9988776655", "age": 41}},
+        json={
+            "patient": {"name": "Ravi Kumar", "phoneNumber": "9988776655", "age": 41}
+        },
     ).json()["entry"]
 
-    listed = internal_admin_client.get("/internal/admin/queue", headers=_admin_headers())
+    listed = internal_admin_client.get(
+        "/internal/admin/queue", headers=_admin_headers()
+    )
     assert listed.status_code == 200
     assert any(item["id"] == created["id"] for item in listed.json()["entries"])
 
@@ -75,11 +87,17 @@ def test_internal_admin_queue_listing_and_acceptance(internal_admin_client) -> N
     assert accepted.json()["entry"]["status"] == "accepted"
 
 
-def test_internal_admin_session_artifacts_and_sync_disabled_contract(internal_admin_client) -> None:
+def test_internal_admin_session_artifacts_and_sync_disabled_contract(
+    internal_admin_client,
+) -> None:
     headers = _auth_headers(internal_admin_client)
     session = internal_admin_client.post(
         "/sessions",
-        json={"patientName": "Anita Sharma", "patientPhoneNumber": "9876543210", "patientAge": 32},
+        json={
+            "patientName": "Anita Sharma",
+            "patientPhoneNumber": "9876543210",
+            "patientAge": 32,
+        },
         headers=headers,
     ).json()["session"]
     internal_admin_client.post(
@@ -98,7 +116,9 @@ def test_internal_admin_session_artifacts_and_sync_disabled_contract(internal_ad
     )
     for _ in range(10):
         time.sleep(0.05)
-        current = internal_admin_client.get(f"/sessions/{session['id']}", headers=headers).json()["session"]
+        current = internal_admin_client.get(
+            f"/sessions/{session['id']}", headers=headers
+        ).json()["session"]
         if current["transcription"]["status"] == "completed":
             break
     internal_admin_client.post(f"/sessions/{session['id']}/pdf", headers=headers)
@@ -117,11 +137,15 @@ def test_internal_admin_session_artifacts_and_sync_disabled_contract(internal_ad
     assert pdf.status_code == 200
     assert pdf.headers["content-type"].startswith("application/pdf")
 
-    stats = internal_admin_client.get("/internal/admin/fettle-sync/stats", headers=_admin_headers())
+    stats = internal_admin_client.get(
+        "/internal/admin/fettle-sync/stats", headers=_admin_headers()
+    )
     assert stats.status_code == 200
     assert stats.json()["enabled"] is False
 
-    jobs = internal_admin_client.get("/internal/admin/fettle-sync/jobs", headers=_admin_headers())
+    jobs = internal_admin_client.get(
+        "/internal/admin/fettle-sync/jobs", headers=_admin_headers()
+    )
     assert jobs.status_code == 200
     assert jobs.json()["jobs"] == []
 
@@ -139,11 +163,15 @@ def test_internal_admin_session_mutation_routes(internal_admin_client) -> None:
     assert created.status_code == 201
     session = created.json()["session"]
 
-    listed = internal_admin_client.get("/internal/admin/sessions", headers=_admin_headers())
+    listed = internal_admin_client.get(
+        "/internal/admin/sessions", headers=_admin_headers()
+    )
     assert listed.status_code == 200
     assert any(item["id"] == session["id"] for item in listed.json()["sessions"])
 
-    detail = internal_admin_client.get(f"/internal/admin/sessions/{session['id']}", headers=_admin_headers())
+    detail = internal_admin_client.get(
+        f"/internal/admin/sessions/{session['id']}", headers=_admin_headers()
+    )
     assert detail.status_code == 200
     assert detail.json()["session"]["patient"]["name"] == "Meera Iyer"
 
@@ -169,7 +197,9 @@ def test_internal_admin_session_mutation_routes(internal_admin_client) -> None:
     current = None
     for _ in range(10):
         time.sleep(0.05)
-        current = internal_admin_client.get(f"/internal/admin/sessions/{session['id']}", headers=_admin_headers())
+        current = internal_admin_client.get(
+            f"/internal/admin/sessions/{session['id']}", headers=_admin_headers()
+        )
         if current.json()["session"]["transcription"]["status"] == "completed":
             break
 
@@ -187,9 +217,14 @@ def test_internal_admin_session_mutation_routes(internal_admin_client) -> None:
         },
     )
     assert updated.status_code == 200
-    assert updated.json()["session"]["transcription"]["draftDocument"]["title"] == "Admin Draft"
+    assert (
+        updated.json()["session"]["transcription"]["draftDocument"]["title"]
+        == "Admin Draft"
+    )
 
-    pdf = internal_admin_client.post(f"/internal/admin/sessions/{session['id']}/pdf", headers=_admin_headers())
+    pdf = internal_admin_client.post(
+        f"/internal/admin/sessions/{session['id']}/pdf", headers=_admin_headers()
+    )
     assert pdf.status_code == 200
     assert pdf.json()["session"]["documentArtifact"] is not None
 

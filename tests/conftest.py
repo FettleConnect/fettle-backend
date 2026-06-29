@@ -42,7 +42,10 @@ _set_test_default("OPENROUTER_API_KEY", "test-openrouter-key")
 _set_test_default("LEGACY_AUTH_SECRET", "test-legacy-auth-secret")
 _set_test_default("INTERNAL_API_ENABLED", "false")
 _set_test_default("INTERNAL_API_KEY", "test-internal-key")
-_set_test_default("ARTIFACT_STORAGE_ROOT", str(Path(__file__).resolve().parents[1] / "var" / "test-artifacts"))
+_set_test_default(
+    "ARTIFACT_STORAGE_ROOT",
+    str(Path(__file__).resolve().parents[1] / "var" / "test-artifacts"),
+)
 _set_test_default("PDF_DELIVERY_PUBLIC_BASE_URL", "http://localhost:8000")
 _set_test_default("PDF_DELIVERY_TOKEN_SECRET", "test-pdf-delivery-secret")
 _set_test_default("FETTLE_SYNC_ENABLED", "false")
@@ -197,7 +200,9 @@ def sync_client() -> TestClient:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _seed_transcribe_defaults(db_session: AsyncSession) -> AsyncGenerator[None, None]:
+async def _seed_transcribe_defaults(
+    db_session: AsyncSession,
+) -> AsyncGenerator[None, None]:
     await seed_transcribe_defaults(db_session)
     await reset_transcribe_runtime_state(db_session)
     yield

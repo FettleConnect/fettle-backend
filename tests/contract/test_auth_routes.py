@@ -39,7 +39,9 @@ def test_auth_select_returns_pin_login_required(client) -> None:
 def test_pin_login_and_auth_me_flow(client) -> None:
     doctors = client.get("/doctors").json()["doctors"]
     for doctor in doctors:
-        login = client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+        login = client.post(
+            "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+        )
         if login.json().get("status") == "authenticated":
             break
 
@@ -57,7 +59,11 @@ def test_pin_change_flow_returns_authenticated_session(internal_admin_client) ->
     created = internal_admin_client.post(
         "/internal/admin/doctors",
         headers={"X-Internal-API-Key": "test-internal-key"},
-        json={"name": "Dr. Pin Change", "department": "General", "phoneNumber": "9000000001"},
+        json={
+            "name": "Dr. Pin Change",
+            "department": "General",
+            "phoneNumber": "9000000001",
+        },
     )
     doctor = created.json()["doctor"]
 
@@ -67,7 +73,9 @@ def test_pin_change_flow_returns_authenticated_session(internal_admin_client) ->
     )
     temporary_pin = reset.json()["temporaryPin"]
 
-    login = internal_admin_client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": temporary_pin})
+    login = internal_admin_client.post(
+        "/auth/pin/login", json={"doctorId": doctor["id"], "pin": temporary_pin}
+    )
     assert login.status_code == 200
     assert login.json()["status"] == "pin_change_required"
 
@@ -80,10 +88,14 @@ def test_pin_change_flow_returns_authenticated_session(internal_admin_client) ->
     assert payload["token"]
     assert payload["doctor"]["id"] == doctor["id"]
 
-    me = internal_admin_client.get("/auth/me", headers={"Authorization": f"Bearer {payload['token']}"})
+    me = internal_admin_client.get(
+        "/auth/me", headers={"Authorization": f"Bearer {payload['token']}"}
+    )
     assert me.status_code == 200
     assert me.json()["doctor"]["id"] == doctor["id"]
 
-    relogin = internal_admin_client.post("/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"})
+    relogin = internal_admin_client.post(
+        "/auth/pin/login", json={"doctorId": doctor["id"], "pin": "123456"}
+    )
     assert relogin.status_code == 200
     assert relogin.json()["status"] == "authenticated"
