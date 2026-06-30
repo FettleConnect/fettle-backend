@@ -22,6 +22,9 @@ class Organization(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(
         String(100), unique=True, nullable=False, index=True
     )
+    subdomain: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True, index=True
+    )
     # Discriminator: "hospital" | "corporate" | "clinical"
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

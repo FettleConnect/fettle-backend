@@ -54,6 +54,27 @@ def create_access_token(
     )
 
 
+def create_admin_access_token(
+    *,
+    username: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    expire = datetime.now(tz=timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    )
+    payload: dict[str, Any] = {
+        "sub": "platform-admin",
+        "username": username,
+        "role": "superadmin",
+        "scope": "platform_admin",
+        "exp": expire,
+        "iat": datetime.now(tz=timezone.utc),
+    }
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
+
+
 def decode_token(token: str) -> dict[str, Any]:
     """Decode and validate a JWT. Raises TokenError on any failure."""
     try:
@@ -70,5 +91,24 @@ def decode_token(token: str) -> dict[str, Any]:
     required = {"sub", "email", "organization_id", "role"}
     if not required.issubset(payload):
         raise TokenError("Token missing required claims")
+
+    return payload
+
+
+def decode_admin_token(token: str) -> dict[str, Any]:
+    """Decode and validate a platform admin JWT."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise TokenError("Token has expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise TokenError(f"Invalid token: {exc}") from exc
+
+    if payload.get("scope") != "platform_admin" or payload.get("role") != "superadmin":
+        raise TokenError("Token is not a platform admin token")
 
     return payload

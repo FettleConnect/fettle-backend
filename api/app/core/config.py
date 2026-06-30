@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     debug: bool = False
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    server_name: str = ""
+    admin_username: str = ""
+    admin_password: str = ""
 
     # ------------------------------------------------------------------ Database
     database_url: str = Field(

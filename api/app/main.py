@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.app.core.config import settings
 from api.app.db.base import engine
 from api.app.routers.legacy_hospital import router as legacy_hospital_router
+from api.app.views.admin import router as admin_router
+from api.app.views.admin import subdomain_router as admin_subdomain_router
 from api.app.views.pwa_transcript_compat import router as pwa_transcript_compat_router
 from api.app.views.v1.auth import router as auth_router
 from api.app.views.v1.chatbot import router as chatbot_router
@@ -58,6 +60,8 @@ app.add_middleware(
 _V1 = "/api/v1"
 
 app.include_router(health_router)
+app.include_router(admin_subdomain_router)
+app.include_router(admin_router)
 app.include_router(pwa_transcript_compat_router)
 # Legacy-compatible routes — mounted at root to match what the frontend calls
 app.include_router(google_auth_router)

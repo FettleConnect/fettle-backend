@@ -50,6 +50,8 @@ _set_test_default("PDF_DELIVERY_TOKEN_SECRET", "test-pdf-delivery-secret")
 _set_test_default("FETTLE_SYNC_ENABLED", "false")
 _set_test_default("FETTLE_BACKEND_URL", "http://127.0.0.1:1")
 _set_test_default("FETTLE_SYNC_SECRET", "test-secret")
+_set_test_default("ADMIN_USERNAME", "platform-admin")
+_set_test_default("ADMIN_PASSWORD", "platform-admin-password")
 
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup

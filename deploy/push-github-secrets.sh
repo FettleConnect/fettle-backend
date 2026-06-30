@@ -103,6 +103,18 @@ set_env_secret_if_present() {
   fi
 }
 
+set_env_secret_from_var_if_present() {
+  local env_name="$1"
+  local secret_name="$2"
+  local var_name="$3"
+  local value="${!var_name:-}"
+  if [[ -n "${value}" ]]; then
+    set_env_secret "${env_name}" "${secret_name}" "${value}"
+  else
+    echo "Skipped empty ${env_name} secret: ${secret_name} (${var_name})"
+  fi
+}
+
 populate_env_file() {
   local template="${ROOT_DIR}/.env.example"
   local output="$1"
@@ -170,11 +182,48 @@ for secret_name in \
   OPENROUTER_API_KEY \
   OPENAI_API_KEY \
   SONIOX_API_KEY \
+  DEEPGRAM_API_KEY \
+  CARTESIA_API_KEY \
+  SARVAM_API_KEY \
+  GLADIA_API_KEY \
+  ELEVEN_API_KEY \
+  GOOGLE_API_KEY \
   VOBIZ_API_KEY \
   AWS_ACCESS_KEY_ID \
   AWS_SECRET_ACCESS_KEY \
   JWT_SECRET_KEY \
-  INTERNAL_API_SHARED_SECRET
+  INTERNAL_API_SHARED_SECRET \
+  LEGACY_AUTH_SECRET \
+  PDF_DELIVERY_TOKEN_SECRET \
+  FETTLE_SYNC_SECRET \
+  OPENROUTER_MODEL \
+  CARTESIA_VOICE_ID \
+  VOBIZ_API_URL \
+  VOBIZ_AUTH_ID \
+  VOBIZ_AUTH_TOKEN \
+  VOBIZ_PASSWORD \
+  VOBIZ_WHATSAPP_SECRET \
+  VOBIZ_WABA_ID \
+  VOBIZ_WHATSAPP_CHANNEL_ID \
+  VOBIZ_DID \
+  ADMIN_PHONE \
+  AWS_REGION \
+  S3_BUCKET_NAME \
+  PAYPAL_CLIENT_ID \
+  PAYPAL_CLIENT_SECRET \
+  PAYPAL_API_BASE \
+  CONSULTATION_PRICE_USD \
+  LIVEKIT_ROOM_NAME \
+  LIVEKIT_SIP_TRUNK_ID \
+  LIVEKIT_SIP_OUTBOUND_TRUNK_ID \
+  SIP_OUTBOUND_TRUNK_ID \
+  SIP_OUTBOUND_NUMBER \
+  SIP_OUTBOUND_URI \
+  SIP_OUTBOUND_USERNAME \
+  SIP_OUTBOUND_PASSWORD \
+  PDF_DELIVERY_PUBLIC_BASE_URL \
+  FETTLE_BACKEND_URL \
+  FETTLE_SYNC_ENABLED
 do
   set_secret_if_present "${secret_name}"
 done
@@ -183,16 +232,25 @@ set_env_secret_if_present "production" "PROD_SSH_PRIVATE_KEY"
 set_env_secret_if_present "production" "PROD_HOST"
 set_env_secret_if_present "production" "PROD_PORT"
 set_env_secret_if_present "production" "PROD_USER"
+set_env_secret_if_present "production" "DATABASE_URL"
 set_env_secret_if_present "production" "APP_BIND_PORT"
 set_env_secret_if_present "production" "PUBLIC_PORT"
 set_env_secret_if_present "production" "SERVER_NAME"
+set_env_secret_if_present "production" "ADMIN_USERNAME"
+set_env_secret_if_present "production" "ADMIN_PASSWORD"
 
 set_env_secret_if_present "staging" "STAGING_VPS_SSH_PRIVATE_KEY"
 set_env_secret_if_present "staging" "STAGING_VPS_HOST"
 set_env_secret_if_present "staging" "STAGING_VPS_PORT"
 set_env_secret_if_present "staging" "STAGING_VPS_USER"
-set_env_secret_if_present "staging" "APP_BIND_PORT"
-set_env_secret_if_present "staging" "PUBLIC_PORT"
-set_env_secret_if_present "staging" "SERVER_NAME"
+set_env_secret_from_var_if_present "staging" "DATABASE_URL" "STAGING_DATABASE_URL"
+set_env_secret_from_var_if_present "staging" "DB_NAME" "STAGING_DB_NAME"
+set_env_secret_from_var_if_present "staging" "DB_USER" "STAGING_DB_USER"
+set_env_secret_from_var_if_present "staging" "DB_PASSWORD" "STAGING_DB_PASSWORD"
+set_env_secret_from_var_if_present "staging" "APP_BIND_PORT" "STAGING_APP_BIND_PORT"
+set_env_secret_from_var_if_present "staging" "PUBLIC_PORT" "STAGING_PUBLIC_PORT"
+set_env_secret_from_var_if_present "staging" "SERVER_NAME" "STAGING_SERVER_NAME"
+set_env_secret_from_var_if_present "staging" "ADMIN_USERNAME" "STAGING_ADMIN_USERNAME"
+set_env_secret_from_var_if_present "staging" "ADMIN_PASSWORD" "STAGING_ADMIN_PASSWORD"
 
 echo "All secrets uploaded successfully."
