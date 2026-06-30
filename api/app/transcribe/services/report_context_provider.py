@@ -328,7 +328,9 @@ class OpenAIReportContextProvider(BaseReportContextProvider):
         try:
             parsed = ExtractionResponsePayload.model_validate(payload)
         except ValidationError:
-            payload = await self._generate_json(_build_extraction_input(unit, repair=True))
+            payload = await self._generate_json(
+                _build_extraction_input(unit, repair=True)
+            )
             try:
                 parsed = ExtractionResponsePayload.model_validate(payload)
             except ValidationError as exc:

@@ -12,7 +12,10 @@ from api.app.db.base import engine
 from api.app.routers.legacy_hospital import router as legacy_hospital_router
 from api.app.transcribe.bootstrap import seed_transcribe_defaults
 from api.app.transcribe.db import SessionFactory
-from api.app.transcribe.repositories.sqlalchemy import SqlSessionRepository, SqlSyncRepository
+from api.app.transcribe.repositories.sqlalchemy import (
+    SqlSessionRepository,
+    SqlSyncRepository,
+)
 from api.app.transcribe.services.fettle_sync import FettleSyncService
 from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
 from api.app.transcribe.services.sessions import SessionService
@@ -41,11 +44,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     background_tasks: list[asyncio.Task] = []
     async with SessionFactory() as session:
         await seed_transcribe_defaults(session)
-        await SessionService(SqlSessionRepository(session), settings).resume_pending_report_context_jobs()
+        await SessionService(
+            SqlSessionRepository(session), settings
+        ).resume_pending_report_context_jobs()
     if settings.fettle_sync_enabled:
-        background_tasks.append(
-            asyncio.create_task(_run_fettle_sync_worker(settings))
-        )
+        background_tasks.append(asyncio.create_task(_run_fettle_sync_worker(settings)))
     background_tasks.append(asyncio.create_task(_run_pdf_delivery_worker(settings)))
     yield
     for task in background_tasks:

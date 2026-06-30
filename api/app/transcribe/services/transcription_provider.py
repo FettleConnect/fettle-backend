@@ -88,7 +88,9 @@ class LocalTranscriptionProvider(BaseTranscriptionProvider):
         session: ConsultationSession,
         audio: StoredAudioInput,
     ) -> dict[str, Any]:
-        duration = max(30, round(audio.duration_seconds if audio.duration_seconds else 90))
+        duration = max(
+            30, round(audio.duration_seconds if audio.duration_seconds else 90)
+        )
         midpoint = max(12, round(duration / 2))
         doctor_label = session.doctor.name or "Doctor"
         patient_label = session.patient.name or "Patient"
@@ -236,7 +238,11 @@ class OpenAITranscriptSynthesizer:
             )
         return {
             "summary": str(parsed.get("summary", "")).strip(),
-            "metadata": parsed.get("metadata", {}) if isinstance(parsed.get("metadata"), dict) else {},
+            "metadata": (
+                parsed.get("metadata", {})
+                if isinstance(parsed.get("metadata"), dict)
+                else {}
+            ),
             "draftDocument": (
                 parsed.get("draftDocument", {})
                 if isinstance(parsed.get("draftDocument"), dict)
@@ -322,7 +328,9 @@ class SonioxTranscriptionProvider(BaseTranscriptionProvider):
         self.poll_interval_seconds = settings.soniox_poll_interval_seconds
         self.poll_timeout_seconds = settings.soniox_poll_timeout_seconds
         self.language_hints = settings.soniox_language_hints
-        self.provider_name = f"soniox:{self.model}+openai:{settings.openai_synthesis_model}"
+        self.provider_name = (
+            f"soniox:{self.model}+openai:{settings.openai_synthesis_model}"
+        )
         self.synthesizer = OpenAITranscriptSynthesizer(settings)
 
     async def transcribe(
@@ -415,9 +423,7 @@ class SonioxTranscriptionProvider(BaseTranscriptionProvider):
             )
         return transcription_id
 
-    async def _wait_for_transcript(
-        self, transcription_id: str
-    ) -> list[dict[str, Any]]:
+    async def _wait_for_transcript(self, transcription_id: str) -> list[dict[str, Any]]:
         elapsed = 0.0
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             while elapsed < self.poll_timeout_seconds:
@@ -545,9 +551,7 @@ def _extract_openai_response_text(payload: dict[str, Any]) -> str:
     output_text = payload.get("output_text")
     if isinstance(output_text, str):
         return output_text
-    raise TranscriptionProviderError(
-        "OpenAI transcript synthesis returned no text."
-    )
+    raise TranscriptionProviderError("OpenAI transcript synthesis returned no text.")
 
 
 def _normalize_openai_speaker(value: Any) -> str:
@@ -557,9 +561,7 @@ def _normalize_openai_speaker(value: Any) -> str:
     return "unknown"
 
 
-def _speaker_label_for_segment(
-    speaker: str, session: ConsultationSession
-) -> str:
+def _speaker_label_for_segment(speaker: str, session: ConsultationSession) -> str:
     if speaker == "doctor":
         return session.doctor.name or "Doctor"
     if speaker == "patient":
@@ -579,13 +581,15 @@ def _build_soniox_segments(
         if not text:
             continue
         speaker_key = str(token.get("speaker") or "unknown").lower()
-        speaker = "doctor" if speaker_key.endswith("1") else "patient" if speaker_key.endswith("2") else "unknown"
+        speaker = (
+            "doctor"
+            if speaker_key.endswith("1")
+            else "patient" if speaker_key.endswith("2") else "unknown"
+        )
         speaker_label = (
             session.doctor.name
             if speaker == "doctor"
-            else session.patient.name
-            if speaker == "patient"
-            else "Speaker"
+            else session.patient.name if speaker == "patient" else "Speaker"
         )
         start_ms = int(token.get("start_ms") or 0)
         end_ms = int(token.get("end_ms") or start_ms)

@@ -602,7 +602,9 @@ class SessionService:
                 )
                 continue
             extracted_upload_ids = (
-                session.reportContext.extractedUploadIds if session.reportContext else []
+                session.reportContext.extractedUploadIds
+                if session.reportContext
+                else []
             )
             if (
                 session.reportContext is not None
@@ -716,13 +718,19 @@ class SessionService:
         selected = self._select_report_context_chunks(
             session, chunk_ids, custom_chunks, reject_applied=True
         )
-        updated = await self.update_draft_document(session_id, doctor_id, draft_document)
+        updated = await self.update_draft_document(
+            session_id, doctor_id, draft_document
+        )
         next_state = {
             "status": "ready",
             "selectedChunkIds": [chunk.id for chunk in selected],
             "appliedChunkIds": sorted(
                 {
-                    *(session.reportContext.appliedChunkIds if session.reportContext else []),
+                    *(
+                        session.reportContext.appliedChunkIds
+                        if session.reportContext
+                        else []
+                    ),
                     *[chunk.id for chunk in selected],
                 }
             ),
@@ -771,6 +779,7 @@ class SessionService:
             )
             for row in upload_rows
         ]
+        serialized_upload_ids = [str(row["id"]) for row in upload_rows]
         now = datetime.now(UTC).isoformat()
         total_units = self._estimate_report_context_units(uploads)
         base_progress = {
@@ -790,7 +799,9 @@ class SessionService:
                 session.reportContext.appliedChunkIds if session.reportContext else []
             ),
             "extractedUploadIds": (
-                session.reportContext.extractedUploadIds if session.reportContext else []
+                session.reportContext.extractedUploadIds
+                if session.reportContext
+                else []
             ),
             "progress": base_progress,
             "updatedAt": now,
@@ -817,6 +828,12 @@ class SessionService:
         progress_chunks: list[dict] = []
 
         async def on_progress(progress) -> None:
+            if await self._report_context_job_canceled(
+                session_id=session_id,
+                doctor_id=doctor_id,
+                job_id=job_id,
+            ):
+                return
             progress_state = {
                 "totalUnits": progress.total_units,
                 "completedUnits": progress.completed_units,
@@ -827,7 +844,8 @@ class SessionService:
                 "etaSecondsUpper": 0,
                 "currentStage": (
                     "Finalizing results"
-                    if progress.completed_units + progress.failed_units >= progress.total_units
+                    if progress.completed_units + progress.failed_units
+                    >= progress.total_units
                     else "Extracting report content"
                 ),
             }
@@ -838,10 +856,14 @@ class SessionService:
                     "status": "processing",
                     "selectedChunkIds": [],
                     "appliedChunkIds": (
-                        session.reportContext.appliedChunkIds if session.reportContext else []
+                        session.reportContext.appliedChunkIds
+                        if session.reportContext
+                        else []
                     ),
                     "extractedUploadIds": (
-                        session.reportContext.extractedUploadIds if session.reportContext else []
+                        session.reportContext.extractedUploadIds
+                        if session.reportContext
+                        else []
                     ),
                     "progress": progress_state,
                     "updatedAt": progress_state["updatedAt"],
@@ -868,15 +890,35 @@ class SessionService:
             chunks = await self.report_context_provider.extract_chunks(
                 session_id, uploads, on_progress=on_progress
             )
+            if await self._report_context_job_canceled(
+                session_id=session_id,
+                doctor_id=doctor_id,
+                job_id=job_id,
+            ):
+                current_session = await self.repository.get_session(
+                    session_id, doctor_id
+                )
+                if current_session is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=ErrorResponse(message="Session not found.").model_dump(),
+                    )
+                return current_session
             ready_state = {
                 "status": "ready",
                 "selectedChunkIds": [],
                 "appliedChunkIds": (
-                    session.reportContext.appliedChunkIds if session.reportContext else []
+                    session.reportContext.appliedChunkIds
+                    if session.reportContext
+                    else []
                 ),
                 "extractedUploadIds": sorted(
                     {
-                        *(session.reportContext.extractedUploadIds if session.reportContext else []),
+                        *(
+                            session.reportContext.extractedUploadIds
+                            if session.reportContext
+                            else []
+                        ),
                         *normalized_upload_ids,
                     }
                 ),
@@ -897,7 +939,7 @@ class SessionService:
                 session_id,
                 doctor_id,
                 normalized_upload_ids,
-                self._serialize_report_context_chunks(chunks, normalized_upload_ids),
+                self._serialize_report_context_chunks(chunks, serialized_upload_ids),
                 ready_state,
             )
             if updated is None:
@@ -914,7 +956,7 @@ class SessionService:
                         "completedUnits": total_units,
                         "failedUnits": 0,
                         "chunks": self._serialize_report_context_chunks(
-                            chunks, normalized_upload_ids
+                            chunks, serialized_upload_ids
                         ),
                         "progress": ready_state["progress"],
                         "finishedAt": datetime.now(UTC).isoformat(),
@@ -922,15 +964,35 @@ class SessionService:
                 )
             return updated
         except ReportContextPartialFailureError as exc:
+            if await self._report_context_job_canceled(
+                session_id=session_id,
+                doctor_id=doctor_id,
+                job_id=job_id,
+            ):
+                current_session = await self.repository.get_session(
+                    session_id, doctor_id
+                )
+                if current_session is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=ErrorResponse(message="Session not found.").model_dump(),
+                    )
+                return current_session
             ready_state = {
                 "status": "ready",
                 "selectedChunkIds": [],
                 "appliedChunkIds": (
-                    session.reportContext.appliedChunkIds if session.reportContext else []
+                    session.reportContext.appliedChunkIds
+                    if session.reportContext
+                    else []
                 ),
                 "extractedUploadIds": sorted(
                     {
-                        *(session.reportContext.extractedUploadIds if session.reportContext else []),
+                        *(
+                            session.reportContext.extractedUploadIds
+                            if session.reportContext
+                            else []
+                        ),
                         *normalized_upload_ids,
                     }
                 ),
@@ -950,7 +1012,7 @@ class SessionService:
                 doctor_id,
                 normalized_upload_ids,
                 self._serialize_report_context_chunks(
-                    exc.partial_chunks, normalized_upload_ids
+                    exc.partial_chunks, serialized_upload_ids
                 ),
                 ready_state,
             )
@@ -968,7 +1030,7 @@ class SessionService:
                         "completedUnits": exc.completed_units,
                         "failedUnits": exc.failed_units,
                         "chunks": self._serialize_report_context_chunks(
-                            exc.partial_chunks, normalized_upload_ids
+                            exc.partial_chunks, serialized_upload_ids
                         ),
                         "progress": ready_state["progress"],
                         "error": str(exc),
@@ -986,10 +1048,14 @@ class SessionService:
                 "status": "failed",
                 "selectedChunkIds": [],
                 "appliedChunkIds": (
-                    session.reportContext.appliedChunkIds if session.reportContext else []
+                    session.reportContext.appliedChunkIds
+                    if session.reportContext
+                    else []
                 ),
                 "extractedUploadIds": (
-                    session.reportContext.extractedUploadIds if session.reportContext else []
+                    session.reportContext.extractedUploadIds
+                    if session.reportContext
+                    else []
                 ),
                 "progress": {
                     "totalUnits": total_units,
@@ -1027,7 +1093,9 @@ class SessionService:
     def _normalize_report_upload_ids(
         self, session: ConsultationSession, upload_ids: list[str]
     ) -> list[str]:
-        unique_upload_ids = [upload_id for upload_id in dict.fromkeys(upload_ids) if upload_id]
+        unique_upload_ids = [
+            upload_id for upload_id in dict.fromkeys(upload_ids) if upload_id
+        ]
         if not unique_upload_ids:
             raise HTTPException(
                 status_code=400,
@@ -1068,12 +1136,13 @@ class SessionService:
                 ).model_dump(),
             )
         selected = [
-            chunk
-            for chunk in session.reportContext.chunks
-            if chunk.id in chunk_ids
+            chunk for chunk in session.reportContext.chunks if chunk.id in chunk_ids
         ]
         selected.extend(
-            [ReportContextChunk.model_validate(chunk) for chunk in (custom_chunks or [])]
+            [
+                ReportContextChunk.model_validate(chunk)
+                for chunk in (custom_chunks or [])
+            ]
         )
         if not selected:
             raise HTTPException(
@@ -1114,6 +1183,20 @@ class SessionService:
                 total += 1
         return total
 
+    async def _report_context_job_canceled(
+        self,
+        *,
+        session_id: str,
+        doctor_id: str,
+        job_id: str | None,
+    ) -> bool:
+        if job_id is None:
+            return False
+        job = await self.repository.get_report_context_job(
+            session_id, doctor_id, job_id
+        )
+        return bool(job and job.get("status") == "canceled")
+
     def _serialize_report_context_chunks(
         self,
         chunks,
@@ -1125,8 +1208,16 @@ class SessionService:
                 "id": chunk.id,
                 "uploadId": upload_map.get(chunk.sourceIndex or 0),
                 "sourceFileName": chunk.sourceFileName,
-                **({"sourceIndex": chunk.sourceIndex} if chunk.sourceIndex is not None else {}),
-                **({"pageNumber": chunk.pageNumber} if chunk.pageNumber is not None else {}),
+                **(
+                    {"sourceIndex": chunk.sourceIndex}
+                    if chunk.sourceIndex is not None
+                    else {}
+                ),
+                **(
+                    {"pageNumber": chunk.pageNumber}
+                    if chunk.pageNumber is not None
+                    else {}
+                ),
                 "title": chunk.title,
                 "category": chunk.category,
                 "text": chunk.text,
@@ -1158,7 +1249,9 @@ class SessionService:
                 duration_seconds=float(audio_model.duration_seconds or 0),
             )
             try:
-                result = await self.transcription_provider.transcribe(session_view, audio)
+                result = await self.transcription_provider.transcribe(
+                    session_view, audio
+                )
             except Exception as exc:
                 message = (
                     str(exc)

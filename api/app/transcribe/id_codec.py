@@ -43,10 +43,7 @@ def decode_public_id(value: str, entity: str) -> int:
         return int(value)
     parsed = uuid.UUID(value)
     payload = (
-        parsed.hex[0:12]
-        + parsed.hex[13:16]
-        + parsed.hex[17:20]
-        + parsed.hex[20:32]
+        parsed.hex[0:12] + parsed.hex[13:16] + parsed.hex[17:20] + parsed.hex[20:32]
     )
     code = int(payload[0:2], 16)
     if CODE_TO_ENTITY.get(code) != entity:

@@ -111,7 +111,10 @@ class LiveTranscriptionService:
                 )
 
     async def _handle_start(
-        self, websocket: WebSocket, state: LiveTranscriptionState, payload: dict[str, Any]
+        self,
+        websocket: WebSocket,
+        state: LiveTranscriptionState,
+        payload: dict[str, Any],
     ) -> None:
         access_token = str(payload.get("accessToken") or "").strip()
         session_id = str(payload.get("sessionId") or "").strip()
@@ -233,7 +236,10 @@ class LiveTranscriptionService:
             return
 
     async def _send_json(
-        self, websocket: WebSocket, payload: dict[str, Any], state: LiveTranscriptionState
+        self,
+        websocket: WebSocket,
+        payload: dict[str, Any],
+        state: LiveTranscriptionState,
     ) -> None:
         async with state.send_lock:
             await websocket.send_json(payload)
@@ -317,9 +323,13 @@ def _tokens_to_segments(
         if not text:
             continue
         speaker_key = token.speaker
-        speaker, speaker_label = _speaker_details(speaker_key, doctor_name, patient_name)
+        speaker, speaker_label = _speaker_details(
+            speaker_key, doctor_name, patient_name
+        )
         if current is not None and current["speaker"] == speaker:
-            current["text"] = f"{current['text']}{_join_token_text(current['text'], text)}"
+            current["text"] = (
+                f"{current['text']}{_join_token_text(current['text'], text)}"
+            )
             current["endedAtSeconds"] = round(token.end_ms / 1000, 3)
             continue
         current = {
@@ -361,17 +371,10 @@ def _join_token_text(existing: str, token_text: str) -> str:
         return token_text
     previous_char = existing_tail[-1]
     current_char = next_head[0]
-    if (
-        previous_char.isalpha()
-        and current_char.isalpha()
-        and (
-            len(existing_tail) == 1
-            or existing_tail.endswith(("'", "-", "/"))
-            or (previous_char.isupper() and current_char.islower())
-            or (previous_char.islower() and current_char.islower())
-        )
-    ):
-        return token_text
+    if previous_char.isalpha() and current_char.isalpha():
+        if len(existing_tail) == 1 or existing_tail.endswith(("'", "-", "/")):
+            return token_text
+        return f" {token_text}"
     return f" {token_text}"
 
 

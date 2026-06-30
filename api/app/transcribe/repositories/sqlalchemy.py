@@ -244,9 +244,8 @@ def _report_context_chunk_payload(
     stored_file: StoredFile | None,
     created_at: datetime,
 ) -> ReportContextChunk:
-    source_file_name = (
-        item.source_file_name
-        or (stored_file.original_filename if stored_file is not None else "Imported report")
+    source_file_name = item.source_file_name or (
+        stored_file.original_filename if stored_file is not None else "Imported report"
     )
     title = item.label or source_file_name
     return ReportContextChunk(
@@ -306,7 +305,9 @@ def _normalize_report_context_state(
             if str(normalized.get("error") or "").strip()
             else None
         ),
-        "updatedAt": updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at,
+        "updatedAt": (
+            updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at
+        ),
         "progress": normalized_progress,
     }
 
@@ -477,7 +478,11 @@ async def _session_from_model(
         doc_ids = [doc.id for doc in report_docs]
         stored_file_stmt = select(StoredFile).where(
             StoredFile.id.in_(
-                [doc.stored_file_id for doc in report_docs if doc.stored_file_id is not None]
+                [
+                    doc.stored_file_id
+                    for doc in report_docs
+                    if doc.stored_file_id is not None
+                ]
             )
         )
         stored_files = {
@@ -503,7 +508,9 @@ async def _session_from_model(
                 if document is not None and document.stored_file_id is not None
                 else None
             )
-            created_at = document.created_at if document is not None else model.updated_at
+            created_at = (
+                document.created_at if document is not None else model.updated_at
+            )
             chunks.append(_report_context_chunk_payload(item, stored_file, created_at))
         state = _normalize_report_context_state(
             _parse_report_context_state(model.report_context_state_json)
@@ -1849,7 +1856,9 @@ class SqlSessionRepository:
         session_model = await self._load_session(session_id, doctor_id)
         if session_model is None:
             return None
-        documents = await self._load_report_context_documents(session_model.id, upload_ids)
+        documents = await self._load_report_context_documents(
+            session_model.id, upload_ids
+        )
         if len(documents) != len(upload_ids):
             return None
         rows: list[dict] = []
@@ -1898,11 +1907,14 @@ class SqlSessionRepository:
         session_model = await self._load_session(session_id, doctor_id)
         if session_model is None:
             return None
-        documents = await self._load_report_context_documents(session_model.id, upload_ids)
+        documents = await self._load_report_context_documents(
+            session_model.id, upload_ids
+        )
         if len(documents) != len(upload_ids):
             return None
         document_by_upload_id = {
-            encode_public_id("report_upload", document.id): document for document in documents
+            encode_public_id("report_upload", document.id): document
+            for document in documents
         }
         document_ids = [document.id for document in documents]
         await self.session.execute(
@@ -2056,7 +2068,9 @@ class SqlSessionRepository:
                     "sessionId": session_id,
                     "doctorId": doctor_id,
                     "uploadIds": [str(upload_id) for upload_id in upload_ids],
-                    "status": str(payload.get("status") or _public_job_status(job.status)),
+                    "status": str(
+                        payload.get("status") or _public_job_status(job.status)
+                    ),
                 }
             )
         return pending_jobs
@@ -2079,7 +2093,9 @@ class SqlSessionRepository:
             return None
         payload = json.loads(job.payload_json)
         payload.update(payload_updates)
-        payload["updatedAt"] = payload_updates.get("updatedAt") or datetime.now(UTC).isoformat()
+        payload["updatedAt"] = (
+            payload_updates.get("updatedAt") or datetime.now(UTC).isoformat()
+        )
         job.payload_json = json.dumps(payload)
         status = str(payload_updates.get("status") or payload.get("status") or "")
         if status == "ready":
