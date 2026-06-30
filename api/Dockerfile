@@ -8,18 +8,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY api/requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip && \
     pip install -r requirements.txt
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
 # Copy alembic config + migrations first (for migration step)
-COPY --chown=app:app alembic.ini ./
-COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app api/alembic.ini ./
+COPY --chown=app:app api/alembic ./alembic
 
 # Copy application code
-COPY --chown=app:app app ./app
+COPY --chown=app:app api/app ./app
 
 # Create 'api' namespace package so "from api.app.XXX" imports work inside Docker.
 # All source files use api.app.* imports (works locally); inside Docker the app
@@ -30,7 +30,7 @@ RUN mkdir -p /app/api && \
     chown -R app:app /app/api
 
 # Startup script runs migrations then starts uvicorn
-COPY --chown=app:app startup.sh ./
+COPY --chown=app:app api/startup.sh ./
 RUN chmod +x startup.sh
 
 USER app

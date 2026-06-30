@@ -39,6 +39,24 @@ from api.app.models.hospital.campaign import Campaign
 from api.app.models.hospital.dermatology import DermatologyPatient, DermatologyThread
 from api.app.models.hospital.medivoice import MediVoiceSession, MediVoiceTranscription
 from api.app.models.hospital.patient import HospitalUploadLog, Patient
+from api.app.models.hospital.transcribe import (
+    Job,
+    JobAttempt,
+    KpiEvent,
+    StoredFile,
+    TranscribeArtifact,
+    TranscribeDraftDocument,
+    TranscribeIntakeLink,
+    TranscribePdfDeliveryJob,
+    TranscribePdfDeliverySettings,
+    TranscribeQueueEntry,
+    TranscribeReportContextDocument,
+    TranscribeReportContextItem,
+    TranscribeSession,
+    TranscribeSessionAudio,
+    TranscribeSyncJob,
+    TranscribeTranscription,
+)
 from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
 from api.app.models.shared import GlobalConfig
 
@@ -81,4 +99,20 @@ __all__ = [
     "Notification",
     "SupportTicket",
     "GlobalConfig",
+    "Job",
+    "JobAttempt",
+    "KpiEvent",
+    "StoredFile",
+    "TranscribeIntakeLink",
+    "TranscribeSession",
+    "TranscribeSessionAudio",
+    "TranscribeTranscription",
+    "TranscribeDraftDocument",
+    "TranscribeReportContextDocument",
+    "TranscribeReportContextItem",
+    "TranscribeArtifact",
+    "TranscribePdfDeliveryJob",
+    "TranscribePdfDeliverySettings",
+    "TranscribeQueueEntry",
+    "TranscribeSyncJob",
 ]
