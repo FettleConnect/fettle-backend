@@ -32,8 +32,8 @@ from api.app.transcribe.id_codec import decode_public_id, encode_public_id
 from api.app.transcribe.preloaded_doctors import PRELOADED_DOCTORS
 from api.app.transcribe.schemas.common import (
     ConsultationSession,
-    DoctorSummary,
     DoctorProfile,
+    DoctorSummary,
     DocumentArtifact,
     DocumentArtifactDelivery,
     PatientSummary,

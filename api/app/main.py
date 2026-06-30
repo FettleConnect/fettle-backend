@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.app.core.config import Settings, settings
 from api.app.db.base import engine
 from api.app.routers.legacy_hospital import router as legacy_hospital_router
+from api.app.transcribe.api.router import router as pwa_transcribe_router
 from api.app.transcribe.bootstrap import seed_transcribe_defaults
 from api.app.transcribe.db import SessionFactory
 from api.app.transcribe.repositories.sqlalchemy import (
@@ -19,7 +20,6 @@ from api.app.transcribe.repositories.sqlalchemy import (
 from api.app.transcribe.services.fettle_sync import FettleSyncService
 from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
 from api.app.transcribe.services.sessions import SessionService
-from api.app.transcribe.api.router import router as pwa_transcribe_router
 from api.app.views.v1.auth import router as auth_router
 from api.app.views.v1.chatbot import router as chatbot_router
 from api.app.views.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router

@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 from api.app.transcribe.schemas.common import (
     ConsultationSession,
-    DoctorSummary,
     DoctorProfile,
+    DoctorSummary,
     PatientSummary,
     PublicDoctorProfile,
 )

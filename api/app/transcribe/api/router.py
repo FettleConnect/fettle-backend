@@ -3,15 +3,7 @@ from __future__ import annotations
 import uuid
 from urllib.parse import parse_qs
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Header,
-    Query,
-    Request,
-    Response,
-    WebSocket,
-)
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, WebSocket
 
 from api.app.transcribe.api.dependencies import (
     get_auth_service,
