@@ -4,20 +4,20 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.config import Settings, get_settings
-from api.app.transcribe.db import get_db_session
-from api.app.transcribe.observability import ObservabilityService
-from api.app.transcribe.repositories.sqlalchemy import (
+from api.app.db.transcribe import get_db_session
+from api.app.schemas.hospital.transcribe import ErrorResponse
+from api.app.services.transcribe.auth import AuthService
+from api.app.services.transcribe.fettle_sync import FettleSyncService
+from api.app.services.transcribe.observability import ObservabilityService
+from api.app.services.transcribe.pdf_delivery import PdfDeliveryService
+from api.app.services.transcribe.persistence import (
     SqlDoctorRepository,
     SqlQueueRepository,
     SqlSessionRepository,
     SqlSyncRepository,
 )
-from api.app.transcribe.schemas.common import ErrorResponse
-from api.app.transcribe.services.auth import AuthService
-from api.app.transcribe.services.fettle_sync import FettleSyncService
-from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
-from api.app.transcribe.services.queue import QueueService
-from api.app.transcribe.services.sessions import SessionService
+from api.app.services.transcribe.queue import QueueService
+from api.app.services.transcribe.sessions import SessionService
 
 
 def get_auth_service(

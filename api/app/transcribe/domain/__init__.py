@@ -1,1 +1,0 @@
-"""Transcribe domain package."""

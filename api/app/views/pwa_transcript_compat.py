@@ -17,6 +17,58 @@ from fastapi import (
     WebSocketDisconnect,
 )
 
+from api.app.schemas.auth import (
+    AuthMeResponse,
+    ListDoctorsResponse,
+    PinChangeRequest,
+    PinLoginAuthenticatedResponse,
+    PinLoginPinChangeRequiredResponse,
+    PinLoginRequest,
+    SelectDoctorSessionRequest,
+)
+from api.app.schemas.hospital.transcribe import (
+    AcceptQueueEntryResponse,
+    CreateReportContextExtractionJobResponse,
+    CreateSessionRequest,
+    CreateSessionResponse,
+    DraftConsultationDocument,
+    ExtractReportContextRequest,
+    ExtractReportContextResponse,
+    GenerateSessionPdfResponse,
+    GetActiveReportContextExtractionJobResponse,
+    GetDoctorIntakeLinkResponse,
+    GetPatientHistoryResponse,
+    GetPatientProfileByPhoneResponse,
+    GetPublicIntakeLinkResponse,
+    GetReportContextExtractionJobResponse,
+    GetSessionResponse,
+)
+from api.app.schemas.hospital.transcribe import (
+    ListQueueEntriesResponse as QueueListResponse,
+)
+from api.app.schemas.hospital.transcribe import (
+    ListReportContextUploadsResponse,
+    ListSessionsResponse,
+    MigrationStatus,
+    SubmitPublicIntakeRequest,
+    SubmitPublicIntakeResponse,
+    SubmitSessionTranscriptionResponse,
+    UpdateCaseStatusRequest,
+    UpdateDraftDocumentResponse,
+    UpdateQueueEntryResponse,
+    UploadReportContextFileResponse,
+    UploadSessionAudioResponse,
+)
+from api.app.services.transcribe.auth import AuthService
+from api.app.services.transcribe.fettle_sync import FettleSyncService
+from api.app.services.transcribe.observability import ObservabilityService
+from api.app.services.transcribe.pdf_delivery import PdfDeliveryService
+from api.app.services.transcribe.queue import QueueService
+from api.app.services.transcribe.sessions import SessionService
+from api.app.services.transcribe.storage import LocalStorage
+from api.app.services.transcribe.transcription_provider import (
+    LocalTranscriptionProvider,
+)
 from api.app.views.pwa_transcript_dependencies import (
     get_auth_service,
     get_fettle_sync_service,
@@ -27,60 +79,6 @@ from api.app.views.pwa_transcript_dependencies import (
     require_doctor,
     require_internal_admin,
 )
-from api.app.transcribe.observability import ObservabilityService
-from api.app.transcribe.schemas.auth import (
-    AuthMeResponse,
-    ListDoctorsResponse,
-    PinChangeRequest,
-    PinLoginAuthenticatedResponse,
-    PinLoginPinChangeRequiredResponse,
-    PinLoginRequest,
-    SelectDoctorSessionRequest,
-)
-from api.app.transcribe.schemas.health import MigrationStatus
-from api.app.transcribe.schemas.queue import (
-    AcceptQueueEntryResponse,
-    GetDoctorIntakeLinkResponse,
-    GetPatientProfileByPhoneResponse,
-    GetPublicIntakeLinkResponse,
-)
-from api.app.transcribe.schemas.queue import (
-    ListQueueEntriesResponse as QueueListResponse,
-)
-from api.app.transcribe.schemas.queue import (
-    SubmitPublicIntakeRequest,
-    SubmitPublicIntakeResponse,
-    UpdateQueueEntryResponse,
-)
-from api.app.transcribe.schemas.sessions import (
-    CreateReportContextExtractionJobResponse,
-    CreateSessionRequest,
-    CreateSessionResponse,
-    DraftConsultationDocument,
-    ExtractReportContextRequest,
-    ExtractReportContextResponse,
-    GenerateSessionPdfResponse,
-    GetActiveReportContextExtractionJobResponse,
-    GetPatientHistoryResponse,
-    GetReportContextExtractionJobResponse,
-    GetSessionResponse,
-    ListReportContextUploadsResponse,
-    ListSessionsResponse,
-    SubmitSessionTranscriptionResponse,
-    UpdateCaseStatusRequest,
-    UpdateDraftDocumentResponse,
-    UploadReportContextFileResponse,
-    UploadSessionAudioResponse,
-)
-from api.app.transcribe.services.auth import AuthService
-from api.app.transcribe.services.fettle_sync import FettleSyncService
-from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
-from api.app.transcribe.services.queue import QueueService
-from api.app.transcribe.services.sessions import SessionService
-from api.app.transcribe.services.transcription_provider import (
-    LocalTranscriptionProvider,
-)
-from api.app.transcribe.storage import LocalStorage
 
 # LEGACY: root-level Express-style routes consumed by the PWA transcript client.
 router = APIRouter(tags=["transcribe"])

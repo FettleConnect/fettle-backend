@@ -4,12 +4,10 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 
-from api.app.transcribe.schemas.common import (
+from api.app.schemas.hospital.transcribe import (
     ConsultationSession,
     DoctorProfile,
     ErrorResponse,
-)
-from api.app.transcribe.schemas.queue import (
     IntakeLink,
     PatientProfile,
     QueueEntry,

@@ -8,12 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.app.core.config import get_settings
+from api.app.db.transcribe import SessionFactory
 from api.app.main import app
-from api.app.transcribe.db import SessionFactory
-from api.app.transcribe.observability import ObservabilityService
-from api.app.transcribe.repositories.sqlalchemy import SqlSessionRepository
-from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
-from api.app.transcribe.storage import LocalStorage
+from api.app.services.transcribe.observability import ObservabilityService
+from api.app.services.transcribe.pdf_delivery import PdfDeliveryService
+from api.app.services.transcribe.persistence import SqlSessionRepository
+from api.app.services.transcribe.storage import LocalStorage
 
 
 def _auth_headers(client):

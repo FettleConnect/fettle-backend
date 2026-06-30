@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from api.app.transcribe.schemas.common import ConsultationSession
+from api.app.schemas.hospital.transcribe import ConsultationSession
 
 
 class LocalTranscriptionProvider:

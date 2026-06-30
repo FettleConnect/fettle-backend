@@ -11,8 +11,8 @@ from urllib.parse import quote
 from fastapi import HTTPException
 
 from api.app.core.config import Settings
-from api.app.transcribe.schemas.common import ErrorResponse
-from api.app.transcribe.storage import LocalStorage
+from api.app.schemas.hospital.transcribe import ErrorResponse
+from api.app.services.transcribe.storage import LocalStorage
 
 
 class PdfDeliveryService:

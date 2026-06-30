@@ -9,29 +9,30 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.config import get_settings
-from api.app.transcribe.db import SessionFactory
-from api.app.transcribe.repositories.sqlalchemy import (
-    SqlSessionRepository,
-    SqlSyncRepository,
-)
-from api.app.transcribe.schemas.common import ConsultationSession, ErrorResponse
-from api.app.transcribe.schemas.queue import PatientProfile
-from api.app.transcribe.schemas.sessions import (
+from api.app.db.transcribe import SessionFactory
+from api.app.schemas.hospital.transcribe import (
+    ConsultationSession,
     CreateSessionRequest,
     DraftConsultationDocument,
+    ErrorResponse,
+    PatientProfile,
     ReportContextExtractionJob,
     ReportContextUpload,
 )
-from api.app.transcribe.services.audio_metadata import canonicalize_audio_upload
-from api.app.transcribe.services.fettle_sync import FettleSyncService
-from api.app.transcribe.services.pdf import (
+from api.app.services.transcribe.audio_metadata import canonicalize_audio_upload
+from api.app.services.transcribe.fettle_sync import FettleSyncService
+from api.app.services.transcribe.pdf import (
     build_document_artifact,
     build_transcript_pdf,
 )
-from api.app.transcribe.services.transcription_provider import (
+from api.app.services.transcribe.persistence import (
+    SqlSessionRepository,
+    SqlSyncRepository,
+)
+from api.app.services.transcribe.storage import LocalStorage
+from api.app.services.transcribe.transcription_provider import (
     LocalTranscriptionProvider,
 )
-from api.app.transcribe.storage import LocalStorage
 
 ALLOWED_REPORT_CONTEXT_MIME_TYPES = {
     "application/pdf",

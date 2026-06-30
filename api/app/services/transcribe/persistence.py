@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.security import hash_password
 from api.app.models.auth import User
-from api.app.models.hospital.transcribe import Job, KpiEvent, StoredFile
-from api.app.models.organization import Organization
-from api.app.transcribe.domain.models import (
+from api.app.models.hospital.transcribe import (
+    Job,
+    KpiEvent,
+    StoredFile,
     TranscribeArtifact,
     TranscribeDraftDocument,
     TranscribeIntakeLink,
@@ -28,15 +29,18 @@ from api.app.transcribe.domain.models import (
     TranscribeSyncJob,
     TranscribeTranscription,
 )
-from api.app.transcribe.id_codec import decode_public_id, encode_public_id
-from api.app.transcribe.preloaded_doctors import PRELOADED_DOCTORS
-from api.app.transcribe.schemas.common import (
+from api.app.models.organization import Organization
+from api.app.schemas.hospital.transcribe import (
     ConsultationSession,
     DoctorProfile,
     DocumentArtifact,
     DocumentArtifactDelivery,
+    IntakeLink,
+    PatientProfile,
     PatientSummary,
     PublicDoctorProfile,
+    QueueEntry,
+    QueuePatient,
     ReportContextChunk,
     ReportContextProgress,
     SessionAudioArtifact,
@@ -45,12 +49,8 @@ from api.app.transcribe.schemas.common import (
     SessionTranscriptionDraftDocument,
     TranscriptSegment,
 )
-from api.app.transcribe.schemas.queue import (
-    IntakeLink,
-    PatientProfile,
-    QueueEntry,
-    QueuePatient,
-)
+from api.app.services.transcribe.preloaded_doctors import PRELOADED_DOCTORS
+from api.app.utils.transcribe_id_codec import decode_public_id, encode_public_id
 
 PDF_DELIVERY_BLOCK_TTL_SECONDS = 120
 TRANSCRIBE_ORG_SLUG = "transcribe"

@@ -1,1 +1,0 @@
-"""Transcribe product module."""
