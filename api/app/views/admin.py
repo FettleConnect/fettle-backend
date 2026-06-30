@@ -552,7 +552,9 @@ async def update_db_row(
     return _serialize_row(row)
 
 
-@router.delete("/api/db/tables/{table_name}/rows", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/api/db/tables/{table_name}/rows", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_db_row(
     table_name: str,
     body: AdminDbDelete,
@@ -560,7 +562,9 @@ async def delete_db_row(
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     table = _get_admin_table(table_name)
-    result = await session.execute(delete(table).where(*_primary_key_filters(table, body.pk)))
+    result = await session.execute(
+        delete(table).where(*_primary_key_filters(table, body.pk))
+    )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Row not found")
     await session.commit()
@@ -615,7 +619,9 @@ async def _hospital_summaries(
         .outerjoin(doctor_counts, doctor_counts.c.organization_id == Organization.id)
         .outerjoin(user_counts, user_counts.c.organization_id == Organization.id)
         .outerjoin(inbound_counts, inbound_counts.c.organization_id == Organization.id)
-        .outerjoin(outbound_counts, outbound_counts.c.organization_id == Organization.id)
+        .outerjoin(
+            outbound_counts, outbound_counts.c.organization_id == Organization.id
+        )
         .where(Organization.type == "hospital")
         .order_by(Organization.name.asc())
     )
@@ -646,7 +652,9 @@ async def _hospital_summaries(
     ]
 
 
-async def _require_hospital(session: AsyncSession, hospital_id: uuid.UUID) -> Organization:
+async def _require_hospital(
+    session: AsyncSession, hospital_id: uuid.UUID
+) -> Organization:
     hospital = await session.get(Organization, hospital_id)
     if hospital is None or hospital.type != "hospital":
         raise HTTPException(status_code=404, detail="Hospital not found")
