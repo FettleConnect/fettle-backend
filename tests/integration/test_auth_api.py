@@ -256,7 +256,32 @@ class TestAdminConsole:
     async def test_admin_page_renders(self, async_client: AsyncClient) -> None:
         resp = await async_client.get("/admin")
         assert resp.status_code == 200
-        assert "Fettle Admin" in resp.text
+        assert "Dashboard" in resp.text
+        assert "hospital-summary" in resp.text
+
+    async def test_admin_login_page_renders(self, async_client: AsyncClient) -> None:
+        resp = await async_client.get("/admin/login")
+        assert resp.status_code == 200
+        assert "Sign in" in resp.text
+
+    async def test_admin_database_pages_render(self, async_client: AsyncClient) -> None:
+        tables_resp = await async_client.get("/admin/tables")
+        table_resp = await async_client.get("/admin/table?name=global_configs")
+        hospitals_resp = await async_client.get("/admin/hospitals")
+        hospital_resp = await async_client.get("/admin/hospital?id=test")
+        corporate_resp = await async_client.get("/admin/corporate")
+        assert tables_resp.status_code == 200
+        assert "Database" in tables_resp.text
+        assert table_resp.status_code == 200
+        assert "Row editor" in table_resp.text
+        assert hospitals_resp.status_code == 200
+        assert "Hospital List" in hospitals_resp.text
+        assert hospital_resp.status_code == 200
+        assert "Change Password" in hospital_resp.text
+        assert "hospital-table-stack" in hospital_resp.text
+        assert "row-dialog" in hospital_resp.text
+        assert corporate_resp.status_code == 200
+        assert "Corporate Clients" in corporate_resp.text
 
     async def test_admin_subdomain_root_renders(
         self, async_client: AsyncClient
@@ -286,12 +311,19 @@ class TestAdminConsole:
         org = org_resp.json()
         assert org["surfaces"] == ["hospital", "transcript"]
 
+        detail_with_default_admin = await async_client.get(
+            f"/admin/api/hospitals/{org['id']}", headers=headers
+        )
+        assert detail_with_default_admin.status_code == 200
+        assert any(
+            item["username"] == "admin" and item["role"] == "hospital_admin"
+            for item in detail_with_default_admin.json()["users"]
+        )
+
         user_resp = await async_client.post(
-            "/admin/api/users",
+            f"/admin/api/hospitals/{org['id']}/users",
             headers=headers,
             json={
-                "organization_id": org["id"],
-                "email": f"abc-user-{suffix}@hospital.com",
                 "username": f"abc_user_{suffix}",
                 "name": "ABC User",
                 "role": "hospital_user",
@@ -304,6 +336,78 @@ class TestAdminConsole:
         assert user["organization_id"] == org["id"]
         assert user["username"] == f"abc_user_{suffix}"
 
+        password_resp = await async_client.put(
+            f"/admin/api/hospitals/{org['id']}/users/{user['id']}/password",
+            headers=headers,
+            json={"password": "NewHospitalUserPass123!"},
+        )
+        assert password_resp.status_code == 200
+
+        detail_resp = await async_client.get(
+            f"/admin/api/hospitals/{org['id']}", headers=headers
+        )
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["hospital"]["id"] == org["id"]
+        assert any(item["id"] == user["id"] for item in detail_resp.json()["users"])
+
         hospitals_resp = await async_client.get("/admin/api/hospitals", headers=headers)
         assert hospitals_resp.status_code == 200
         assert any(item["id"] == org["id"] for item in hospitals_resp.json())
+
+        metrics_resp = await async_client.get("/admin/api/metrics", headers=headers)
+        assert metrics_resp.status_code == 200
+        assert metrics_resp.json()["hospitals"] >= 1
+
+        summary_resp = await async_client.get(
+            "/admin/api/hospitals/summary", headers=headers
+        )
+        assert summary_resp.status_code == 200
+        assert any(
+            item["id"] == org["id"]
+            and item["patient_count"] == 0
+            and item["doctor_count"] == 0
+            and item["user_count"] >= 1
+            for item in summary_resp.json()
+        )
+
+    async def test_platform_admin_can_manage_database_rows(
+        self, async_client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        token = await self._get_platform_admin_token(async_client)
+        headers = {"Authorization": f"Bearer {token}"}
+        key = f"admin-db-test-{uuid.uuid4().hex[:8]}"
+
+        tables_resp = await async_client.get("/admin/api/db/tables", headers=headers)
+        assert tables_resp.status_code == 200
+        assert any(table["name"] == "global_configs" for table in tables_resp.json())
+
+        create_resp = await async_client.post(
+            "/admin/api/db/tables/global_configs/rows",
+            headers=headers,
+            json={"values": {"key": key, "value": "first"}},
+        )
+        assert create_resp.status_code == 201
+        assert create_resp.json()["key"] == key
+
+        update_resp = await async_client.put(
+            "/admin/api/db/tables/global_configs/rows",
+            headers=headers,
+            json={"pk": {"key": key}, "values": {"value": "second"}},
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["value"] == "second"
+
+        rows_resp = await async_client.get(
+            "/admin/api/db/tables/global_configs",
+            headers=headers,
+        )
+        assert rows_resp.status_code == 200
+        assert any(row["key"] == key for row in rows_resp.json()["rows"])
+
+        delete_resp = await async_client.request(
+            "DELETE",
+            "/admin/api/db/tables/global_configs/rows",
+            headers=headers,
+            json={"pk": {"key": key}},
+        )
+        assert delete_resp.status_code == 204

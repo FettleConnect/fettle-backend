@@ -188,8 +188,10 @@ class TestVobizOutboundWebhook:
 
 
 class TestVobizWhatsAppWebhook:
-    async def test_status_update_acknowledged(self, async_client: AsyncClient) -> None:
-        resp = await async_client.post(
+    async def test_status_update_acknowledged(
+        self, async_client_no_db: AsyncClient
+    ) -> None:
+        resp = await async_client_no_db.post(
             "/api/v1/webhooks/vobiz/whatsapp",
             json={
                 "event": "message.status",
@@ -204,9 +206,9 @@ class TestVobizWhatsAppWebhook:
         assert resp.status_code == 200
 
     async def test_incoming_message_acknowledged(
-        self, async_client: AsyncClient
+        self, async_client_no_db: AsyncClient
     ) -> None:
-        resp = await async_client.post(
+        resp = await async_client_no_db.post(
             "/api/v1/webhooks/vobiz/whatsapp",
             json={
                 "event": "message.received",

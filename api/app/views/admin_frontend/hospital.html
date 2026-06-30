@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fettle Admin Hospital</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css" />
+  <script src="/admin/assets/hospital.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/admin">Fettle Admin</a>
+    <nav>
+      <a href="/admin">Dashboard</a>
+      <a class="active" href="/admin/hospitals">Hospitals</a>
+      <a href="/admin/corporate">Corporate</a>
+      <a href="/admin/tables">Database</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Hospital</p>
+        <h1 id="hospital-name">Manage Hospital</h1>
+      </div>
+      <a class="button-link secondary" href="/admin/hospitals">All hospitals</a>
+    </header>
+    <section class="metric-grid" id="hospital-metrics"></section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Hospital Users</h2>
+      </div>
+      <div class="table-scroll">
+        <table id="hospital-users">
+          <thead>
+            <tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Create User</h2>
+      </div>
+      <form id="hospital-user-form">
+        <input name="name" placeholder="Name" required />
+        <input name="username" placeholder="Username" />
+        <input name="password" placeholder="Password" type="password" required />
+        <select name="role">
+          <option>hospital_admin</option>
+          <option>hospital_user</option>
+          <option>doctor</option>
+        </select>
+        <button>Create</button>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Change Password</h2>
+      </div>
+      <form id="password-form" class="inline-form">
+        <select name="user_id" id="password-user" required></select>
+        <input name="password" placeholder="New password" type="password" required />
+        <button>Update</button>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Hospital Tables</h2>
+      </div>
+      <div id="hospital-table-stack" class="stacked-tables"></div>
+    </section>
+  </main>
+</div>
+<dialog id="row-dialog">
+  <form method="dialog" class="dialog-card">
+    <div class="section-heading">
+      <h2 id="dialog-title">Edit row</h2>
+      <button id="dialog-close" class="secondary" type="button">Close</button>
+    </div>
+    <textarea id="dialog-json" rows="18" spellcheck="false"></textarea>
+    <div class="toolbar">
+      <button id="dialog-save" type="button">Save</button>
+      <button id="dialog-delete" class="danger" type="button">Delete</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>
