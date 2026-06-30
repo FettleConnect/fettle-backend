@@ -151,6 +151,18 @@ def test_extract_report_context_async_job_completes(client) -> None:
     assert report_context["extractedUploadIds"] == [upload["id"]]
 
 
+def test_report_context_active_job_returns_null_when_idle(client) -> None:
+    headers, session = _create_completed_session(client)
+
+    response = client.get(
+        f"/sessions/{session['id']}/report-context/jobs/active",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"job": None}
+
+
 def test_report_context_upload_delete_and_job_controls(client) -> None:
     headers, session = _create_completed_session(client)
     upload = client.post(

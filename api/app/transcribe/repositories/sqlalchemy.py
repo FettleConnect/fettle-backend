@@ -4,18 +4,17 @@ import json
 import re
 import secrets
 import uuid
-from datetime import UTC, datetime
-from typing import Literal, cast
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal, cast
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.security import hash_password
 from api.app.models.auth import User
-from api.app.models.hospital.transcribe import (
-    Job,
-    KpiEvent,
-    StoredFile,
+from api.app.models.hospital.transcribe import Job, KpiEvent, StoredFile
+from api.app.models.organization import Organization
+from api.app.transcribe.domain.models import (
     TranscribeArtifact,
     TranscribeDraftDocument,
     TranscribeIntakeLink,
@@ -29,18 +28,16 @@ from api.app.models.hospital.transcribe import (
     TranscribeSyncJob,
     TranscribeTranscription,
 )
-from api.app.models.organization import Organization
-from api.app.schemas.hospital.transcribe import (
+from api.app.transcribe.id_codec import decode_public_id, encode_public_id
+from api.app.transcribe.preloaded_doctors import PRELOADED_DOCTORS
+from api.app.transcribe.schemas.common import (
     ConsultationSession,
+    DoctorSummary,
     DoctorProfile,
     DocumentArtifact,
     DocumentArtifactDelivery,
-    IntakeLink,
-    PatientProfile,
     PatientSummary,
     PublicDoctorProfile,
-    QueueEntry,
-    QueuePatient,
     ReportContextChunk,
     ReportContextProgress,
     SessionAudioArtifact,
@@ -49,10 +46,15 @@ from api.app.schemas.hospital.transcribe import (
     SessionTranscriptionDraftDocument,
     TranscriptSegment,
 )
-from api.app.services.transcribe.preloaded_doctors import PRELOADED_DOCTORS
-from api.app.utils.transcribe_id_codec import decode_public_id, encode_public_id
+from api.app.transcribe.schemas.queue import (
+    IntakeLink,
+    PatientProfile,
+    QueueEntry,
+    QueuePatient,
+)
 
 PDF_DELIVERY_BLOCK_TTL_SECONDS = 120
+REPORT_CONTEXT_UPLOAD_TTL = timedelta(hours=24)
 TRANSCRIBE_ORG_SLUG = "transcribe"
 
 
@@ -98,15 +100,50 @@ def _slugify(value: str) -> str:
     return re.sub(r"-{2,}", "-", normalized).strip("-")
 
 
+def _serialize_datetime(value: datetime) -> datetime:
+    return value.astimezone(UTC)
+
+
+def _serialize_datetime_string(value: datetime) -> str:
+    return _serialize_datetime(value).isoformat().replace("+00:00", "Z")
+
+
+def _coerce_iso_datetime_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return _serialize_datetime_string(value)
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return None
+        try:
+            return _serialize_datetime_string(
+                datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            )
+        except ValueError:
+            return candidate
+    return None
+
+
+def _doctor_summary_from_model(model: User) -> DoctorSummary:
+    return DoctorSummary(
+        name=model.name,
+        department=model.department,
+        **({"phoneNumber": model.mobile_number} if model.mobile_number else {}),
+        **({"email": model.email} if model.email else {}),
+    )
+
+
 def _doctor_profile_from_model(model: User) -> DoctorProfile:
     return DoctorProfile(
         id=_encode_doctor_id(model.id),
         name=model.name,
         department=model.department,
-        phoneNumber=model.mobile_number,
-        email=model.email,
-        createdAt=model.created_at,
-        lastLoginAt=model.last_login_at or model.created_at,
+        **({"phoneNumber": model.mobile_number} if model.mobile_number else {}),
+        **({"email": model.email} if model.email else {}),
+        createdAt=_serialize_datetime(model.created_at),
+        lastLoginAt=_serialize_datetime(model.last_login_at or model.created_at),
     )
 
 
@@ -128,8 +165,8 @@ def _intake_link_from_model(
         label=model.label,
         token=model.token,
         isActive=model.is_active,
-        createdAt=model.created_at,
-        updatedAt=model.updated_at,
+        createdAt=_serialize_datetime(model.created_at),
+        updatedAt=_serialize_datetime(model.updated_at),
     )
 
 
@@ -140,7 +177,7 @@ def _queue_entry_from_model(model: TranscribeQueueEntry) -> QueueEntry:
         intakeLinkId=(
             encode_public_id("intake_link", model.intake_link_id)
             if model.intake_link_id is not None
-            else ""
+            else None
         ),
         intakeLabel=model.intake_label,
         patient=QueuePatient(
@@ -150,15 +187,17 @@ def _queue_entry_from_model(model: TranscribeQueueEntry) -> QueueEntry:
         ),
         status=model.status,  # type: ignore[arg-type]
         source=model.source,  # type: ignore[arg-type]
-        submittedAt=model.submitted_at,
-        acceptedAt=model.accepted_at,
+        submittedAt=_serialize_datetime(model.submitted_at),
+        acceptedAt=(
+            _serialize_datetime(model.accepted_at) if model.accepted_at else None
+        ),
         sessionId=(
             encode_public_id("session", model.session_id)
             if model.session_id is not None
             else None
         ),
-        createdAt=model.created_at,
-        updatedAt=model.updated_at,
+        createdAt=_serialize_datetime(model.created_at),
+        updatedAt=_serialize_datetime(model.updated_at),
     )
 
 
@@ -200,25 +239,76 @@ def _pdf_delivery_job_payload(model: TranscribePdfDeliveryJob) -> dict:
     }
 
 
-def _report_context_text_from_file(
-    document: TranscribeReportContextDocument, stored_file: StoredFile | None
-) -> str:
-    if stored_file is None:
-        return f"Imported report upload {document.id} is available for clinical review."
-    file_name = stored_file.original_filename
-    content_type = stored_file.content_type
-    size_kb = max(1, round(stored_file.size_bytes / 1024))
-    if content_type == "application/pdf":
-        source_label = "PDF report"
-    elif content_type.startswith("image/"):
-        source_label = "scanned report image"
-    else:
-        source_label = "uploaded clinical report"
-    return (
-        f"Imported {source_label} '{file_name}' ({size_kb} KB). "
-        "Use this source to review prior investigations, diagnoses, medications, cautions, and follow-up findings "
-        "before finalizing the draft."
+def _report_context_chunk_payload(
+    item: TranscribeReportContextItem,
+    stored_file: StoredFile | None,
+    created_at: datetime,
+) -> ReportContextChunk:
+    source_file_name = (
+        item.source_file_name
+        or (stored_file.original_filename if stored_file is not None else "Imported report")
     )
+    title = item.label or source_file_name
+    return ReportContextChunk(
+        id=encode_public_id("report_chunk", item.id),
+        sourceFileName=source_file_name,
+        sourceIndex=item.source_index,
+        pageNumber=item.page_number,
+        title=title,
+        category=item.category or "report_context",
+        text=item.extracted_text,
+        extractedAt=_serialize_datetime(item.extracted_at or created_at),
+        label=title,
+    )
+
+
+def _parse_report_context_state(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _normalize_report_context_state(
+    payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    normalized = payload or {}
+    progress = normalized.get("progress")
+    normalized_progress = None
+    if isinstance(progress, dict):
+        normalized_progress = {
+            str(key): value.isoformat() if isinstance(value, datetime) else value
+            for key, value in progress.items()
+        }
+    updated_at = normalized.get("updatedAt")
+    return {
+        "status": str(normalized.get("status") or "ready"),
+        "selectedChunkIds": [
+            str(chunk_id)
+            for chunk_id in normalized.get("selectedChunkIds", [])
+            if str(chunk_id).strip()
+        ],
+        "appliedChunkIds": [
+            str(chunk_id)
+            for chunk_id in normalized.get("appliedChunkIds", [])
+            if str(chunk_id).strip()
+        ],
+        "extractedUploadIds": [
+            str(upload_id)
+            for upload_id in normalized.get("extractedUploadIds", [])
+            if str(upload_id).strip()
+        ],
+        "error": (
+            str(normalized.get("error")).strip()
+            if str(normalized.get("error") or "").strip()
+            else None
+        ),
+        "updatedAt": updated_at.isoformat() if isinstance(updated_at, datetime) else updated_at,
+        "progress": normalized_progress,
+    }
 
 
 def _sync_job_payload(model: TranscribeSyncJob) -> dict:
@@ -259,6 +349,9 @@ def _public_job_status(status: str) -> str:
 async def _session_from_model(
     session: AsyncSession, model: TranscribeSession
 ) -> ConsultationSession:
+    doctor_model = await session.get(User, model.doctor_id)
+    if doctor_model is None:
+        raise ValueError(f"doctor {model.doctor_id} not found for session {model.id}")
     audio_stmt = (
         select(TranscribeSessionAudio, StoredFile)
         .join(StoredFile, StoredFile.id == TranscribeSessionAudio.stored_file_id)
@@ -271,11 +364,12 @@ async def _session_from_model(
     if audio_row is not None:
         audio_model, file_model = audio_row
         audio_artifact = SessionAudioArtifact(
+            id=encode_public_id("audio_artifact", audio_model.id),
             fileName=file_model.original_filename,
             mimeType=file_model.content_type,
             sizeBytes=file_model.size_bytes,
             durationSeconds=float(audio_model.duration_seconds or 0),
-            uploadedAt=audio_model.created_at,
+            uploadedAt=_serialize_datetime(audio_model.created_at),
         )
 
     transcription_stmt = (
@@ -306,11 +400,12 @@ async def _session_from_model(
         elif transcription_model.transcript_text:
             transcript_segments = [
                 TranscriptSegment(
-                    id="segment-1",
+                    id=str(uuid.uuid4()),
                     speaker="unknown",
                     speakerLabel="Consultation",
                     text=transcription_model.transcript_text,
                     startedAtSeconds=0,
+                    endedAtSeconds=0,
                 )
             ]
         else:
@@ -318,17 +413,21 @@ async def _session_from_model(
         transcription = SessionTranscription(
             status=transcription_model.status,
             providerName=transcription_model.provider_name,
-            requestedAt=transcription_model.created_at,
+            requestedAt=_serialize_datetime(transcription_model.created_at),
             completedAt=(
-                transcription_model.updated_at
+                _serialize_datetime(transcription_model.updated_at)
                 if transcription_model.status == "completed"
                 else None
             ),
-            stage=transcription_model.stage
+            stage=(
+                transcription_model.stage
+                if transcription_model.status == "processing"
+                else None
+            )
             or (
-                "completed"
-                if transcription_model.status == "completed"
-                else "transcribing_conversation"
+                "transcribing_conversation"
+                if transcription_model.status == "processing"
+                else None
             ),
             summary=transcription_model.summary
             or (
@@ -361,7 +460,7 @@ async def _session_from_model(
             fileName=file_model.original_filename,
             mimeType=file_model.content_type,
             sizeBytes=file_model.size_bytes,
-            createdAt=artifact_model.created_at,
+            createdAt=_serialize_datetime(artifact_model.created_at),
             delivery=DocumentArtifactDelivery(
                 shareTitle="Consultation Summary",
                 shareMessage=f"Share {file_model.original_filename} with {model.patient_name or 'the patient'} after review.",
@@ -376,48 +475,75 @@ async def _session_from_model(
     report_context = None
     if report_docs:
         doc_ids = [doc.id for doc in report_docs]
-        items_stmt = select(TranscribeReportContextItem).where(
-            TranscribeReportContextItem.document_id.in_(doc_ids)
+        stored_file_stmt = select(StoredFile).where(
+            StoredFile.id.in_(
+                [doc.stored_file_id for doc in report_docs if doc.stored_file_id is not None]
+            )
+        )
+        stored_files = {
+            file_model.id: file_model
+            for file_model in (await session.scalars(stored_file_stmt)).all()
+        }
+        doc_by_id = {doc.id: doc for doc in report_docs}
+        items_stmt = (
+            select(TranscribeReportContextItem)
+            .where(TranscribeReportContextItem.document_id.in_(doc_ids))
+            .order_by(
+                TranscribeReportContextItem.document_id.asc(),
+                TranscribeReportContextItem.page_number.asc().nullsfirst(),
+                TranscribeReportContextItem.id.asc(),
+            )
         )
         items = list((await session.scalars(items_stmt)).all())
-        chunks = [
-            ReportContextChunk(
-                id=encode_public_id("report_chunk", item.id),
-                label=item.label,
-                pageNumber=item.page_number,
-                text=item.extracted_text,
+        chunks = []
+        for item in items:
+            document = doc_by_id.get(item.document_id)
+            stored_file = (
+                stored_files.get(document.stored_file_id)
+                if document is not None and document.stored_file_id is not None
+                else None
             )
-            for item in items
-        ]
-        processing_doc = next(
-            (doc for doc in report_docs if doc.status == "processing"), None
+            created_at = document.created_at if document is not None else model.updated_at
+            chunks.append(_report_context_chunk_payload(item, stored_file, created_at))
+        state = _normalize_report_context_state(
+            _parse_report_context_state(model.report_context_state_json)
         )
         progress = None
-        if processing_doc is not None:
-            progress = ReportContextProgress(
-                totalUnits=max(len(report_docs), 1),
-                completedUnits=len(
-                    [doc for doc in report_docs if doc.status == "ready"]
-                ),
-                failedUnits=len([doc for doc in report_docs if doc.status == "failed"]),
-                startedAt=processing_doc.created_at,
-                updatedAt=processing_doc.created_at,
-                currentStage="Extracting report content",
-            )
+        if isinstance(state.get("progress"), dict):
+            try:
+                progress = ReportContextProgress.model_validate(state["progress"])
+            except Exception:
+                progress = None
+        status = cast(str, state.get("status") or "ready")
+        if any(doc.status == "processing" for doc in report_docs):
+            status = "processing"
         report_context = SessionReportContext(
-            status="processing" if processing_doc is not None else "ready",
+            status=status,
             chunks=chunks,
-            extractedUploadIds=[
-                encode_public_id("report_upload", doc.id)
-                for doc in report_docs
-                if doc.status == "ready"
-            ],
+            selectedChunkIds=cast(list[str], state.get("selectedChunkIds") or []),
+            appliedChunkIds=cast(list[str], state.get("appliedChunkIds") or []),
+            extractedUploadIds=cast(
+                list[str],
+                state.get("extractedUploadIds")
+                or [
+                    encode_public_id("report_upload", doc.id)
+                    for doc in report_docs
+                    if doc.status == "ready"
+                ],
+            ),
             progress=progress,
+            updatedAt=(
+                datetime.fromisoformat(str(state["updatedAt"]))
+                if state.get("updatedAt")
+                else _serialize_datetime(model.updated_at)
+            ),
+            error=cast(str | None, state.get("error")),
         )
 
     return ConsultationSession(
         id=encode_public_id("session", model.id),
         doctorId=_encode_doctor_id(model.doctor_id),
+        doctor=_doctor_summary_from_model(doctor_model),
         patient=PatientSummary(
             name=model.patient_name or "",
             phoneNumber=model.patient_phone_number or "",
@@ -425,8 +551,8 @@ async def _session_from_model(
         ),
         caseStatus=cast(Literal["open", "closed"], model.case_status),
         status=model.status,
-        createdAt=model.created_at,
-        updatedAt=model.updated_at,
+        createdAt=_serialize_datetime(model.created_at),
+        updatedAt=_serialize_datetime(model.updated_at),
         audioArtifact=audio_artifact,
         transcription=transcription,
         documentArtifact=document_artifact,
@@ -1170,6 +1296,40 @@ class SqlSessionRepository:
         await self.session.refresh(session_model)
         return await _session_from_model(self.session, session_model)
 
+    async def fail_transcription(
+        self,
+        session_id: str,
+        error_message: str,
+    ) -> ConsultationSession | None:
+        try:
+            session_pk = _decode_session_id(session_id)
+        except ValueError:
+            return None
+        session_model = await self.session.get(TranscribeSession, session_pk)
+        if session_model is None:
+            return None
+        transcription_stmt = select(TranscribeTranscription).where(
+            TranscribeTranscription.session_id == session_model.id
+        )
+        transcription = await self.session.scalar(transcription_stmt)
+        if transcription is None:
+            transcription = TranscribeTranscription(
+                session_id=session_model.id,
+                status="failed",
+                provider_name="unknown",
+            )
+            self.session.add(transcription)
+        transcription.status = "failed"
+        transcription.summary = None
+        transcription.stage = "failed"
+        transcription.transcript_text = error_message[:1000]
+        transcription.updated_at = datetime.now(UTC)
+        session_model.status = "failed"
+        session_model.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(session_model)
+        return await _session_from_model(self.session, session_model)
+
     async def update_draft_document(
         self, session_id: str, doctor_id: str, draft_document: dict
     ) -> ConsultationSession | None:
@@ -1680,20 +1840,70 @@ class SqlSessionRepository:
         await self.session.commit()
         return True
 
-    async def extract_report_context(
+    async def get_report_context_upload_blobs(
         self,
         session_id: str,
         doctor_id: str,
         upload_ids: list[str],
+    ) -> list[dict] | None:
+        session_model = await self._load_session(session_id, doctor_id)
+        if session_model is None:
+            return None
+        documents = await self._load_report_context_documents(session_model.id, upload_ids)
+        if len(documents) != len(upload_ids):
+            return None
+        rows: list[dict] = []
+        for document in documents:
+            if document.stored_file_id is None:
+                return None
+            stored_file = await self.session.get(StoredFile, document.stored_file_id)
+            if stored_file is None:
+                return None
+            rows.append(
+                {
+                    "id": encode_public_id("report_upload", document.id),
+                    "fileName": stored_file.original_filename,
+                    "mimeType": stored_file.content_type,
+                    "sizeBytes": stored_file.size_bytes,
+                    "storageKey": stored_file.storage_key,
+                }
+            )
+        return rows
+
+    async def update_report_context_state(
+        self,
+        session_id: str,
+        doctor_id: str,
+        payload: dict[str, Any],
     ) -> ConsultationSession | None:
         session_model = await self._load_session(session_id, doctor_id)
         if session_model is None:
             return None
-        documents = await self._load_report_context_documents(
-            session_model.id, upload_ids
+        session_model.report_context_state_json = json.dumps(
+            _normalize_report_context_state(payload)
         )
+        session_model.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(session_model)
+        return await _session_from_model(self.session, session_model)
+
+    async def finalize_report_context_extraction(
+        self,
+        session_id: str,
+        doctor_id: str,
+        upload_ids: list[str],
+        chunks: list[dict[str, Any]],
+        payload: dict[str, Any],
+    ) -> ConsultationSession | None:
+        session_model = await self._load_session(session_id, doctor_id)
+        if session_model is None:
+            return None
+        documents = await self._load_report_context_documents(session_model.id, upload_ids)
         if len(documents) != len(upload_ids):
             return None
+        document_by_upload_id = {
+            encode_public_id("report_upload", document.id): document for document in documents
+        }
         document_ids = [document.id for document in documents]
         await self.session.execute(
             delete(TranscribeReportContextItem).where(
@@ -1701,23 +1911,30 @@ class SqlSessionRepository:
             )
         )
         for document in documents:
-            stored_file = (
-                await self.session.get(StoredFile, document.stored_file_id)
-                if document.stored_file_id is not None
-                else None
-            )
-            document.status = "ready"
+            document.status = "ready" if payload.get("status") == "ready" else "failed"
+        for chunk in chunks:
+            upload_id = str(chunk.get("uploadId") or "")
+            if upload_id not in document_by_upload_id:
+                continue
+            document = document_by_upload_id[upload_id]
+            extracted_at = chunk.get("extractedAt")
+            parsed_extracted_at: datetime | None = None
+            if isinstance(extracted_at, str) and extracted_at:
+                parsed_extracted_at = datetime.fromisoformat(extracted_at)
             item = TranscribeReportContextItem(
                 document_id=document.id,
-                page_number=1,
-                label=(
-                    stored_file.original_filename
-                    if stored_file is not None
-                    else "Imported report"
-                ),
-                extracted_text=_report_context_text_from_file(document, stored_file),
+                source_file_name=str(chunk.get("sourceFileName") or ""),
+                source_index=chunk.get("sourceIndex"),
+                page_number=chunk.get("pageNumber"),
+                label=str(chunk.get("title") or chunk.get("label") or ""),
+                category=str(chunk.get("category") or "report_context"),
+                extracted_text=str(chunk.get("text") or ""),
+                extracted_at=parsed_extracted_at,
             )
             self.session.add(item)
+        session_model.report_context_state_json = json.dumps(
+            _normalize_report_context_state(payload)
+        )
         session_model.updated_at = datetime.now(UTC)
         await self.session.commit()
         await self.session.refresh(session_model)
@@ -1737,23 +1954,33 @@ class SqlSessionRepository:
         )
         if len(documents) != len(upload_ids):
             return None
+        now = datetime.now(UTC).isoformat()
         payload = json.dumps(
-            {"sessionId": session_id, "doctorId": doctor_id, "uploadIds": upload_ids}
+            {
+                "sessionId": session_id,
+                "doctorId": doctor_id,
+                "uploadIds": upload_ids,
+                "totalUnits": 0,
+                "completedUnits": 0,
+                "failedUnits": 0,
+                "chunks": [],
+                "createdAt": now,
+                "updatedAt": now,
+            }
         )
         job = Job(
             queue="transcribe",
             product="transcribe",
             job_type="report_context_extract",
-            status="processing",
+            status="queued",
             payload_json=payload,
         )
         self.session.add(job)
         await self.session.flush()
-        now = datetime.now(UTC)
         for document in documents:
-            document.status = "processing"
+            document.status = "uploaded"
             document.job_id = job.id
-        session_model.updated_at = now
+        session_model.updated_at = datetime.now(UTC)
         await self.session.commit()
         await self.session.refresh(job)
         return await self._report_context_job_payload(job)
@@ -1800,9 +2027,45 @@ class SqlSessionRepository:
                 return await self._report_context_job_payload(job)
         return None
 
-    async def complete_report_context_job(
-        self, job_id: str
-    ) -> ConsultationSession | None:
+    async def list_pending_report_context_jobs(self) -> list[dict[str, Any]]:
+        stmt = (
+            select(Job)
+            .where(
+                Job.product == "transcribe",
+                Job.job_type == "report_context_extract",
+                Job.status.in_(["queued", "processing"]),
+            )
+            .order_by(Job.created_at.asc())
+        )
+        jobs = list((await self.session.scalars(stmt)).all())
+        pending_jobs: list[dict[str, Any]] = []
+        for job in jobs:
+            payload = json.loads(job.payload_json)
+            session_id = payload.get("sessionId")
+            doctor_id = payload.get("doctorId")
+            upload_ids = payload.get("uploadIds")
+            if (
+                not isinstance(session_id, str)
+                or not isinstance(doctor_id, str)
+                or not isinstance(upload_ids, list)
+            ):
+                continue
+            pending_jobs.append(
+                {
+                    "id": encode_public_id("report_job", job.id),
+                    "sessionId": session_id,
+                    "doctorId": doctor_id,
+                    "uploadIds": [str(upload_id) for upload_id in upload_ids],
+                    "status": str(payload.get("status") or _public_job_status(job.status)),
+                }
+            )
+        return pending_jobs
+
+    async def update_report_context_job_state(
+        self,
+        job_id: str,
+        payload_updates: dict[str, Any],
+    ) -> dict | None:
         try:
             job_pk = _decode_report_job_id(job_id)
         except ValueError:
@@ -1814,24 +2077,20 @@ class SqlSessionRepository:
             or job.job_type != "report_context_extract"
         ):
             return None
-        if job.status == "cancelled":
-            return None
         payload = json.loads(job.payload_json)
-        session_id = str(payload["sessionId"])
-        doctor_id = str(payload["doctorId"])
-        upload_ids = [str(upload_id) for upload_id in payload.get("uploadIds", [])]
-        updated = await self.extract_report_context(session_id, doctor_id, upload_ids)
-        await self.session.refresh(job)
-        if job.status == "cancelled":
-            await self._reset_cancelled_report_context_uploads(session_id, upload_ids)
-            await self.session.commit()
-            return None
-        if updated is None:
-            job.status = "failed"
-        else:
+        payload.update(payload_updates)
+        payload["updatedAt"] = payload_updates.get("updatedAt") or datetime.now(UTC).isoformat()
+        job.payload_json = json.dumps(payload)
+        status = str(payload_updates.get("status") or payload.get("status") or "")
+        if status == "ready":
             job.status = "completed"
+        elif status == "canceled":
+            job.status = "cancelled"
+        elif status in {"failed", "processing", "queued"}:
+            job.status = "failed" if status == "failed" else status
         await self.session.commit()
-        return updated
+        await self.session.refresh(job)
+        return await self._report_context_job_payload(job)
 
     async def cancel_report_context_job(
         self, session_id: str, doctor_id: str, job_id: str
@@ -1842,8 +2101,12 @@ class SqlSessionRepository:
         job = await self._load_report_context_job(session_model.id, job_id)
         if job is None:
             return None
-        job.status = "cancelled"
         payload = json.loads(job.payload_json)
+        payload["status"] = "canceled"
+        payload["updatedAt"] = datetime.now(UTC).isoformat()
+        payload["finishedAt"] = payload["updatedAt"]
+        job.status = "cancelled"
+        job.payload_json = json.dumps(payload)
         upload_ids = [
             _decode_report_upload_id(str(upload_id))
             for upload_id in payload.get("uploadIds", [])
@@ -1856,36 +2119,21 @@ class SqlSessionRepository:
             docs = (await self.session.scalars(stmt)).all()
             for doc in docs:
                 doc.status = "uploaded"
-        await self.session.commit()
-        return await self._report_context_job_payload(job)
-
-    async def _reset_cancelled_report_context_uploads(
-        self, session_id: str, upload_ids: list[str]
-    ) -> None:
-        try:
-            session_pk = _decode_session_id(session_id)
-            upload_pks = [
-                _decode_report_upload_id(str(upload_id)) for upload_id in upload_ids
-            ]
-        except ValueError:
-            return
-        if not upload_pks:
-            return
-        stmt = select(TranscribeReportContextDocument).where(
-            TranscribeReportContextDocument.session_id == session_pk,
-            TranscribeReportContextDocument.id.in_(upload_pks),
-        )
-        documents = list((await self.session.scalars(stmt)).all())
-        if not documents:
-            return
-        document_ids = [document.id for document in documents]
-        await self.session.execute(
-            delete(TranscribeReportContextItem).where(
-                TranscribeReportContextItem.document_id.in_(document_ids)
+        session_model.report_context_state_json = json.dumps(
+            _normalize_report_context_state(
+                {
+                    "status": "ready",
+                    "selectedChunkIds": [],
+                    "appliedChunkIds": [],
+                    "extractedUploadIds": _parse_report_context_state(
+                        session_model.report_context_state_json
+                    ).get("extractedUploadIds", []),
+                    "updatedAt": payload["updatedAt"],
+                }
             )
         )
-        for document in documents:
-            document.status = "uploaded"
+        await self.session.commit()
+        return await self._report_context_job_payload(job)
 
     async def _load_session(
         self, session_id: str, doctor_id: str
@@ -1977,82 +2225,64 @@ class SqlSessionRepository:
         document: TranscribeReportContextDocument,
         stored_file: StoredFile,
     ) -> dict:
+        expires_at = document.created_at + REPORT_CONTEXT_UPLOAD_TTL
         return {
             "id": encode_public_id("report_upload", document.id),
             "fileName": stored_file.original_filename,
             "mimeType": stored_file.content_type,
             "sizeBytes": stored_file.size_bytes,
-            "expiresAt": document.created_at.isoformat(),
+            "expiresAt": _serialize_datetime_string(expires_at),
         }
 
     async def _report_context_job_payload(self, job: Job) -> dict:
         payload = json.loads(job.payload_json)
-        total_units = len(payload.get("uploadIds", []))
-        completed_units = total_units if job.status == "completed" else 0
-        failed_units = total_units if job.status == "failed" else 0
-        chunks: list[dict] = []
-        session_pk = None
-        try:
-            session_pk = _decode_session_id(str(payload["sessionId"]))
-        except (KeyError, TypeError, ValueError):
-            session_pk = None
-        if session_pk is not None:
-            doc_stmt = select(TranscribeReportContextDocument).where(
-                TranscribeReportContextDocument.session_id == session_pk
-            )
-            report_docs = list((await self.session.scalars(doc_stmt)).all())
-            if report_docs:
-                doc_ids = [doc.id for doc in report_docs]
-                item_stmt = select(TranscribeReportContextItem).where(
-                    TranscribeReportContextItem.document_id.in_(doc_ids)
-                )
-                items = list((await self.session.scalars(item_stmt)).all())
-                chunks = [
-                    {
-                        "id": encode_public_id("report_chunk", item.id),
-                        "sourceFileName": item.label or "Imported report",
-                        "title": item.label or "Imported report",
-                        "category": "report_context",
-                        "text": item.extracted_text,
-                        "extractedAt": job.created_at.isoformat(),
-                        **(
-                            {"pageNumber": item.page_number}
-                            if item.page_number is not None
-                            else {}
-                        ),
-                    }
-                    for item in items
-                ]
-        public_status = _public_job_status(job.status)
+        public_status = str(payload.get("status") or _public_job_status(job.status))
+        normalized_chunks = []
+        for chunk_payload in payload.get("chunks") or []:
+            if not isinstance(chunk_payload, dict):
+                continue
+            normalized_chunk = {
+                key: value for key, value in chunk_payload.items() if value is not None
+            }
+            extracted_at = _coerce_iso_datetime_string(chunk_payload.get("extractedAt"))
+            if extracted_at is not None:
+                normalized_chunk["extractedAt"] = extracted_at
+            normalized_chunks.append(normalized_chunk)
+        progress_payload = payload.get("progress")
+        normalized_progress = None
+        if isinstance(progress_payload, dict):
+            normalized_progress = {
+                key: value
+                for key, value in progress_payload.items()
+                if key not in {"startedAt", "updatedAt"} and value is not None
+            }
+            started_at = _coerce_iso_datetime_string(progress_payload.get("startedAt"))
+            updated_at = _coerce_iso_datetime_string(progress_payload.get("updatedAt"))
+            if started_at is not None:
+                normalized_progress["startedAt"] = started_at
+            if updated_at is not None:
+                normalized_progress["updatedAt"] = updated_at
+
+        created_at = _coerce_iso_datetime_string(payload.get("createdAt"))
+        updated_at = _coerce_iso_datetime_string(payload.get("updatedAt"))
+        started_at = _coerce_iso_datetime_string(payload.get("startedAt"))
+        finished_at = _coerce_iso_datetime_string(payload.get("finishedAt"))
+
         return {
             "id": encode_public_id("report_job", job.id),
             "sessionId": str(payload["sessionId"]),
             "status": public_status,
             "uploadIds": [str(upload_id) for upload_id in payload.get("uploadIds", [])],
-            "totalUnits": total_units,
-            "completedUnits": completed_units,
-            "failedUnits": failed_units,
-            "chunks": chunks,
-            "createdAt": job.created_at.isoformat(),
-            "startedAt": job.created_at.isoformat(),
-            "updatedAt": job.created_at.isoformat(),
-            "finishedAt": (
-                job.created_at.isoformat()
-                if public_status in {"ready", "failed", "canceled"}
-                else None
-            ),
-            "progress": {
-                "totalUnits": total_units,
-                "completedUnits": completed_units,
-                "failedUnits": failed_units,
-                "startedAt": job.created_at.isoformat(),
-                "updatedAt": job.created_at.isoformat(),
-                "currentStage": (
-                    "Extracting report content"
-                    if public_status in {"queued", "processing"}
-                    else "Completed"
-                ),
-            },
+            "totalUnits": int(payload.get("totalUnits") or 0),
+            "completedUnits": int(payload.get("completedUnits") or 0),
+            "failedUnits": int(payload.get("failedUnits") or 0),
+            "chunks": normalized_chunks,
+            **({"error": payload["error"]} if payload.get("error") else {}),
+            "createdAt": created_at or _serialize_datetime_string(job.created_at),
+            **({"startedAt": started_at} if started_at is not None else {}),
+            "updatedAt": updated_at or _serialize_datetime_string(job.created_at),
+            **({"finishedAt": finished_at} if finished_at is not None else {}),
+            **({"progress": normalized_progress} if normalized_progress else {}),
         }
 
 

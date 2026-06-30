@@ -55,7 +55,7 @@ import api.app.models  # noqa: F401, E402 — registers all tables with Base.met
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
 from api.app.main import app  # noqa: E402
-from api.app.services.transcribe.bootstrap import (  # noqa: E402
+from api.app.transcribe.bootstrap import (  # noqa: E402
     reset_transcribe_runtime_state,
     seed_transcribe_defaults,
 )

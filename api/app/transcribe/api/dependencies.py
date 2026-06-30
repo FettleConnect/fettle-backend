@@ -4,20 +4,21 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.app.core.config import Settings, get_settings
-from api.app.db.transcribe import get_db_session
-from api.app.schemas.hospital.transcribe import ErrorResponse
-from api.app.services.transcribe.auth import AuthService
-from api.app.services.transcribe.fettle_sync import FettleSyncService
-from api.app.services.transcribe.observability import ObservabilityService
-from api.app.services.transcribe.pdf_delivery import PdfDeliveryService
-from api.app.services.transcribe.persistence import (
+from api.app.transcribe.db import get_db_session
+from api.app.transcribe.observability import ObservabilityService
+from api.app.transcribe.repositories.sqlalchemy import (
     SqlDoctorRepository,
     SqlQueueRepository,
     SqlSessionRepository,
     SqlSyncRepository,
 )
-from api.app.services.transcribe.queue import QueueService
-from api.app.services.transcribe.sessions import SessionService
+from api.app.transcribe.schemas.common import ErrorResponse
+from api.app.transcribe.services.auth import AuthService
+from api.app.transcribe.services.fettle_sync import FettleSyncService
+from api.app.transcribe.services.live_transcription import LiveTranscriptionService
+from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
+from api.app.transcribe.services.queue import QueueService
+from api.app.transcribe.services.sessions import SessionService
 
 
 def get_auth_service(
@@ -29,8 +30,18 @@ def get_auth_service(
 
 def get_session_service(
     db_session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
 ) -> SessionService:
-    return SessionService(SqlSessionRepository(db_session))
+    return SessionService(SqlSessionRepository(db_session), settings)
+
+
+def get_live_transcription_service(
+    db_session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+) -> LiveTranscriptionService:
+    auth_service = AuthService(SqlDoctorRepository(db_session), settings)
+    session_service = SessionService(SqlSessionRepository(db_session), settings)
+    return LiveTranscriptionService(auth_service, session_service, settings)
 
 
 def get_queue_service(

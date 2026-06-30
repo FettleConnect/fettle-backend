@@ -3,15 +3,15 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from api.app.core.config import Settings
-from api.app.schemas.auth import (
+from api.app.transcribe.schemas.auth import (
     AuthMeResponse,
     ListDoctorsResponse,
     LoginDoctorResponse,
     PinLoginAuthenticatedResponse,
     PinLoginPinChangeRequiredResponse,
 )
-from api.app.schemas.hospital.transcribe import DoctorProfile, ErrorResponse
-from api.app.services.transcribe.tokens import (
+from api.app.transcribe.schemas.common import DoctorProfile, ErrorResponse
+from api.app.transcribe.services.tokens import (
     issue_legacy_doctor_token,
     issue_pin_change_token,
     verify_legacy_doctor_token,
