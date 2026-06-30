@@ -47,7 +47,6 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------------ Vobiz
     vobiz_api_url: str = "https://api.vobiz.ai"
-    vobiz_api_key: str = ""
 
     # ------------------------------------------------------------------ S3 / AWS
     aws_access_key_id: str = ""

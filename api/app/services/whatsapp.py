@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 
 import httpx
@@ -30,9 +31,11 @@ async def send_whatsapp(
 ) -> dict:
     """Send a WhatsApp message via Vobiz API. Returns response JSON."""
     to = _e164(to_number)
+    vobiz_token = os.environ.get("VOBIZ_AUTH_TOKEN", "")
+    vobiz_id = os.environ.get("VOBIZ_AUTH_ID", "")
     headers = {
-        "X-Auth-ID": settings.vobiz_api_key,
-        "X-Auth-Token": settings.vobiz_api_key,
+        "X-Auth-ID": vobiz_id,
+        "X-Auth-Token": vobiz_token,
         "Content-Type": "application/json",
     }
 

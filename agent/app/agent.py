@@ -144,10 +144,11 @@ async def _send_whatsapp(
     channel_id: str | None = None,
 ) -> bool:
     vobiz_url = os.environ.get("VOBIZ_API_URL", "https://api.vobiz.ai")
-    vobiz_key = os.environ.get("VOBIZ_API_KEY", "")
+    vobiz_token = os.environ.get("VOBIZ_AUTH_TOKEN", "")
+    vobiz_id = os.environ.get("VOBIZ_AUTH_ID", "")
     headers = {
-        "X-Auth-ID": vobiz_key,
-        "X-Auth-Token": vobiz_key,
+        "X-Auth-ID": vobiz_id,
+        "X-Auth-Token": vobiz_token,
         "Content-Type": "application/json",
     }
 
@@ -647,10 +648,19 @@ async def _ensure_outbound_infrastructure() -> None:
     trunk_name = os.environ.get(
         "LIVEKIT_SIP_OUTBOUND_TRUNK_NAME", "Vobiz_Outbound_Final_V2"
     )
-    outbound_number = os.environ.get(
-        "SIP_OUTBOUND_NUMBER",
-        os.environ.get("VOBIZ_DID", "+918049280487"),
-    )
+    sip_config = {
+        "SIP_OUTBOUND_NUMBER": os.environ.get("SIP_OUTBOUND_NUMBER", "").strip(),
+        "SIP_OUTBOUND_URI": os.environ.get("SIP_OUTBOUND_URI", "").strip(),
+        "SIP_OUTBOUND_USERNAME": os.environ.get("SIP_OUTBOUND_USERNAME", "").strip(),
+        "SIP_OUTBOUND_PASSWORD": os.environ.get("SIP_OUTBOUND_PASSWORD", "").strip(),
+    }
+    missing_sip_config = [name for name, value in sip_config.items() if not value]
+    if missing_sip_config:
+        logger.warning(
+            "Guard skipped: outbound SIP env not set: %s",
+            ", ".join(missing_sip_config),
+        )
+        return
 
     async with lk_api.LiveKitAPI(livekit_url, api_key, api_secret) as lk:
         trunks = await lk.sip.list_outbound_trunk(lk_api.ListSIPOutboundTrunkRequest())
@@ -663,10 +673,10 @@ async def _ensure_outbound_infrastructure() -> None:
             lk_api.CreateSIPOutboundTrunkRequest(
                 trunk=lk_api.SIPOutboundTrunkInfo(
                     name=trunk_name,
-                    address=os.environ.get("SIP_OUTBOUND_URI", "16099a52.sip.vobiz.ai"),
-                    numbers=[outbound_number],
-                    auth_username=os.environ.get("SIP_OUTBOUND_USERNAME", "fettle"),
-                    auth_password=os.environ.get("SIP_OUTBOUND_PASSWORD", "$fettle"),
+                    address=sip_config["SIP_OUTBOUND_URI"],
+                    numbers=[sip_config["SIP_OUTBOUND_NUMBER"]],
+                    auth_username=sip_config["SIP_OUTBOUND_USERNAME"],
+                    auth_password=sip_config["SIP_OUTBOUND_PASSWORD"],
                     transport=lk_api.SIPTransport.SIP_TRANSPORT_UDP,
                 )
             )

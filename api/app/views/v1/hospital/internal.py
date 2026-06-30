@@ -345,7 +345,9 @@ async def agent_escalation(
     async def _notify() -> None:
         from api.app.services.whatsapp import send_whatsapp
 
-        admin_phone = os.environ.get("ADMIN_PHONE", "+917032451866")
+        admin_phone = os.environ.get("ADMIN_PHONE", "")
+        if not admin_phone:
+            return
         await send_whatsapp(
             to_number=admin_phone,
             template_name="escalation_info",

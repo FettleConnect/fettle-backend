@@ -151,14 +151,8 @@ jobs:
           ELEVEN_API_KEY: ${{ secrets.ELEVEN_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           VOBIZ_API_URL: ${{ secrets.VOBIZ_API_URL }}
-          VOBIZ_API_KEY: ${{ secrets.VOBIZ_API_KEY }}
           VOBIZ_AUTH_ID: ${{ secrets.VOBIZ_AUTH_ID }}
           VOBIZ_AUTH_TOKEN: ${{ secrets.VOBIZ_AUTH_TOKEN }}
-          VOBIZ_PASSWORD: ${{ secrets.VOBIZ_PASSWORD }}
-          VOBIZ_WHATSAPP_SECRET: ${{ secrets.VOBIZ_WHATSAPP_SECRET }}
-          VOBIZ_WABA_ID: ${{ secrets.VOBIZ_WABA_ID }}
-          VOBIZ_WHATSAPP_CHANNEL_ID: ${{ secrets.VOBIZ_WHATSAPP_CHANNEL_ID }}
-          VOBIZ_DID: ${{ secrets.VOBIZ_DID }}
           ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -229,14 +223,8 @@ jobs:
             "ELEVEN_API_KEY=${ELEVEN_API_KEY}" \
             "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
             "VOBIZ_API_URL=${VOBIZ_API_URL:-https://api.vobiz.ai}" \
-            "VOBIZ_API_KEY=${VOBIZ_API_KEY}" \
             "VOBIZ_AUTH_ID=${VOBIZ_AUTH_ID}" \
             "VOBIZ_AUTH_TOKEN=${VOBIZ_AUTH_TOKEN}" \
-            "VOBIZ_PASSWORD=${VOBIZ_PASSWORD}" \
-            "VOBIZ_WHATSAPP_SECRET=${VOBIZ_WHATSAPP_SECRET}" \
-            "VOBIZ_WABA_ID=${VOBIZ_WABA_ID}" \
-            "VOBIZ_WHATSAPP_CHANNEL_ID=${VOBIZ_WHATSAPP_CHANNEL_ID}" \
-            "VOBIZ_DID=${VOBIZ_DID}" \
             "ADMIN_PHONE=${ADMIN_PHONE}" \
             "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
             "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
