@@ -12,7 +12,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: staging
 
     steps:
       - name: Checkout
@@ -22,13 +21,17 @@ jobs:
         env:
           APP_BIND_PORT: ${{ secrets.APP_BIND_PORT }}
           PUBLIC_PORT: ${{ secrets.PUBLIC_PORT }}
+          SSL_PORT: ${{ secrets.SSL_PORT }}
           SERVER_NAME: ${{ secrets.SERVER_NAME }}
         run: |
           APP_NAME="${APP_NAME:-${GITHUB_REPOSITORY##*/}}"
           APP_BIND_PORT="${APP_BIND_PORT:-8000}"
           PUBLIC_PORT="${PUBLIC_PORT:-80}"
+          SSL_PORT="${SSL_PORT:-443}"
           SERVER_NAME="${SERVER_NAME:-_}"
           IMAGE_TAG="${GITHUB_SHA}"
+          SSL_CERT_PATH="/etc/ssl/certs/${APP_NAME}-staging.crt"
+          SSL_KEY_PATH="/etc/ssl/private/${APP_NAME}-staging.key"
 
           echo "APP_NAME=${APP_NAME}" >> "$GITHUB_ENV"
           echo "APP_DIR=/opt/${APP_NAME}-staging" >> "$GITHUB_ENV"
@@ -37,7 +40,28 @@ jobs:
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
           echo "APP_BIND_PORT=${APP_BIND_PORT}" >> "$GITHUB_ENV"
           echo "PUBLIC_PORT=${PUBLIC_PORT}" >> "$GITHUB_ENV"
+          echo "SSL_PORT=${SSL_PORT}" >> "$GITHUB_ENV"
+          echo "SSL_CERT_PATH=${SSL_CERT_PATH}" >> "$GITHUB_ENV"
+          echo "SSL_KEY_PATH=${SSL_KEY_PATH}" >> "$GITHUB_ENV"
           echo "SERVER_NAME=${SERVER_NAME}" >> "$GITHUB_ENV"
+
+      - name: Validate staging deployment secrets
+        env:
+          STAGING_VPS_SSH_PRIVATE_KEY: ${{ secrets.STAGING_VPS_SSH_PRIVATE_KEY }}
+          STAGING_VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
+          STAGING_VPS_USER: ${{ secrets.STAGING_VPS_USER }}
+        run: |
+          missing=()
+          for name in STAGING_VPS_SSH_PRIVATE_KEY STAGING_VPS_HOST STAGING_VPS_USER; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required staging deployment secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Configure these as GitHub Actions repository secrets.\n' >&2
+            exit 1
+          fi
 
       - name: Install envsubst
         run: sudo apt-get update && sudo apt-get install -y gettext-base
@@ -52,7 +76,8 @@ jobs:
       - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
-          context: ./api
+          context: .
+          file: ./api/Dockerfile
           push: true
           tags: |
             ${{ env.API_IMAGE }}:${{ env.IMAGE_TAG }}
@@ -87,6 +112,8 @@ jobs:
           VPS_PORT: ${{ secrets.STAGING_VPS_PORT }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          LIVEKIT_NODE_IP: ${{ secrets.LIVEKIT_NODE_IP }}
+          LIVEKIT_USE_EXTERNAL_IP: ${{ secrets.LIVEKIT_USE_EXTERNAL_IP }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "mkdir -p \"${APP_DIR}\""
@@ -94,10 +121,13 @@ jobs:
           scp -P "${VPS_PORT:-22}" deploy/staging/sip.yaml "$VPS_USER@$VPS_HOST:${APP_DIR}/sip.yaml"
           python - <<'PY'
           from pathlib import Path
+          import json
           import os
 
           livekit_api_key = os.environ["LIVEKIT_API_KEY"]
           livekit_api_secret = os.environ["LIVEKIT_API_SECRET"]
+          livekit_node_ip = os.environ.get("LIVEKIT_NODE_IP") or os.environ["VPS_HOST"]
+          livekit_use_external_ip = os.environ.get("LIVEKIT_USE_EXTERNAL_IP") or "false"
 
           Path(".livekit.yaml").write_text(
               "\n".join(
@@ -109,11 +139,11 @@ jobs:
                       f"  {livekit_api_key}: {livekit_api_secret}",
                       "",
                       "rtc:",
-                      "  node_ip: 0.0.0.0",
+                      f"  node_ip: {json.dumps(livekit_node_ip)}",
                       "  tcp_port: 7881",
                       "  port_range_start: 50000",
-                      "  port_range_end: 60000",
-                      "  use_external_ip: true",
+                      "  port_range_end: 50100",
+                      f"  use_external_ip: {livekit_use_external_ip}",
                       "",
                       "redis:",
                       "  address: redis:6379",
@@ -126,7 +156,7 @@ jobs:
           )
           PY
           scp -P "${VPS_PORT:-22}" .livekit.yaml "$VPS_USER@$VPS_HOST:${APP_DIR}/livekit.yaml"
-          envsubst '${APP_NAME} ${APP_BIND_PORT} ${PUBLIC_PORT} ${SERVER_NAME}' < deploy/prod/nginx/site.conf.template > .site.conf
+          envsubst '${APP_NAME} ${APP_BIND_PORT} ${PUBLIC_PORT} ${SSL_PORT} ${SSL_CERT_PATH} ${SSL_KEY_PATH} ${SERVER_NAME}' < deploy/prod/nginx/site.conf.template > .site.conf
           scp -P "${VPS_PORT:-22}" .site.conf "$VPS_USER@$VPS_HOST:/tmp/${APP_NAME}-staging.conf"
 
       - name: Deploy on staging VPS
@@ -139,41 +169,114 @@ jobs:
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SONIOX_API_KEY: ${{ secrets.SONIOX_API_KEY }}
-          VOBIZ_API_KEY: ${{ secrets.VOBIZ_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
+          CARTESIA_VOICE_ID: ${{ secrets.CARTESIA_VOICE_ID }}
+          SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
+          GLADIA_API_KEY: ${{ secrets.GLADIA_API_KEY }}
+          ELEVEN_API_KEY: ${{ secrets.ELEVEN_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          VOBIZ_API_URL: ${{ secrets.VOBIZ_API_URL }}
+          VOBIZ_AUTH_ID: ${{ secrets.VOBIZ_AUTH_ID }}
+          VOBIZ_AUTH_TOKEN: ${{ secrets.VOBIZ_AUTH_TOKEN }}
+          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          PAYPAL_API_BASE: ${{ secrets.PAYPAL_API_BASE }}
+          CONSULTATION_PRICE_USD: ${{ secrets.CONSULTATION_PRICE_USD }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
           INTERNAL_API_SHARED_SECRET: ${{ secrets.INTERNAL_API_SHARED_SECRET }}
+          LEGACY_AUTH_SECRET: ${{ secrets.LEGACY_AUTH_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          LIVEKIT_ROOM_NAME: ${{ secrets.LIVEKIT_ROOM_NAME }}
+          LIVEKIT_SIP_TRUNK_ID: ${{ secrets.LIVEKIT_SIP_TRUNK_ID }}
+          LIVEKIT_SIP_OUTBOUND_TRUNK_ID: ${{ secrets.LIVEKIT_SIP_OUTBOUND_TRUNK_ID }}
+          SIP_OUTBOUND_TRUNK_ID: ${{ secrets.SIP_OUTBOUND_TRUNK_ID }}
+          SIP_OUTBOUND_NUMBER: ${{ secrets.SIP_OUTBOUND_NUMBER }}
+          SIP_OUTBOUND_URI: ${{ secrets.SIP_OUTBOUND_URI }}
+          SIP_OUTBOUND_USERNAME: ${{ secrets.SIP_OUTBOUND_USERNAME }}
+          SIP_OUTBOUND_PASSWORD: ${{ secrets.SIP_OUTBOUND_PASSWORD }}
+          PDF_DELIVERY_PUBLIC_BASE_URL: ${{ secrets.PDF_DELIVERY_PUBLIC_BASE_URL }}
+          PDF_DELIVERY_TOKEN_SECRET: ${{ secrets.PDF_DELIVERY_TOKEN_SECRET }}
+          FETTLE_BACKEND_URL: ${{ secrets.FETTLE_BACKEND_URL }}
+          FETTLE_SYNC_ENABLED: ${{ secrets.FETTLE_SYNC_ENABLED }}
+          FETTLE_SYNC_SECRET: ${{ secrets.FETTLE_SYNC_SECRET }}
         run: |
+          DB_NAME="${DB_NAME:-fettle_staging}"
+          DB_USER="${DB_USER:-postgres}"
+          DB_PASSWORD="${DB_PASSWORD:-postgres}"
+          DATABASE_URL="${DATABASE_URL:-postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}}"
+
           printf '%s\n' \
             "API_IMAGE=${API_IMAGE}:${IMAGE_TAG}" \
             "AGENT_IMAGE=${AGENT_IMAGE}:${IMAGE_TAG}" \
             "APP_BIND_PORT=${APP_BIND_PORT}" \
             "PUBLIC_PORT=${PUBLIC_PORT}" \
+            "SSL_PORT=${SSL_PORT}" \
+            "SSL_CERT_PATH=${SSL_CERT_PATH}" \
+            "SSL_KEY_PATH=${SSL_KEY_PATH}" \
             "SERVER_NAME=${SERVER_NAME}" \
-            "DB_NAME=fettle_staging" \
-            "DB_USER=postgres" \
-            "DB_PASSWORD=postgres" \
-            "DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/fettle_staging" \
+            "DB_NAME=${DB_NAME}" \
+            "DB_USER=${DB_USER}" \
+            "DB_PASSWORD=${DB_PASSWORD}" \
+            "DATABASE_URL=${DATABASE_URL}" \
             "LIVEKIT_URL=http://livekit-server:7880" \
             "LIVEKIT_API_KEY=${LIVEKIT_API_KEY}" \
             "LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}" \
-            "LIVEKIT_ROOM_NAME=default" \
+            "LIVEKIT_ROOM_NAME=${LIVEKIT_ROOM_NAME:-default}" \
+            "LIVEKIT_SIP_TRUNK_ID=${LIVEKIT_SIP_TRUNK_ID}" \
+            "LIVEKIT_SIP_OUTBOUND_TRUNK_ID=${LIVEKIT_SIP_OUTBOUND_TRUNK_ID}" \
+            "SIP_OUTBOUND_TRUNK_ID=${SIP_OUTBOUND_TRUNK_ID}" \
+            "SIP_OUTBOUND_NUMBER=${SIP_OUTBOUND_NUMBER}" \
+            "SIP_OUTBOUND_URI=${SIP_OUTBOUND_URI}" \
+            "SIP_OUTBOUND_USERNAME=${SIP_OUTBOUND_USERNAME}" \
+            "SIP_OUTBOUND_PASSWORD=${SIP_OUTBOUND_PASSWORD}" \
             "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
-            "OPENROUTER_MODEL=openai/gpt-4o" \
+            "OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-4o}" \
             "OPENAI_API_KEY=${OPENAI_API_KEY}" \
             "SONIOX_API_KEY=${SONIOX_API_KEY}" \
-            "VOBIZ_API_URL=https://api.vobiz.ai" \
-            "VOBIZ_API_KEY=${VOBIZ_API_KEY}" \
+            "DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}" \
+            "CARTESIA_API_KEY=${CARTESIA_API_KEY}" \
+            "CARTESIA_VOICE_ID=${CARTESIA_VOICE_ID:-927c55a9-74a9-4272-871e-a559c8989abe}" \
+            "SARVAM_API_KEY=${SARVAM_API_KEY}" \
+            "GLADIA_API_KEY=${GLADIA_API_KEY}" \
+            "ELEVEN_API_KEY=${ELEVEN_API_KEY}" \
+            "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
+            "VOBIZ_API_URL=${VOBIZ_API_URL:-https://api.vobiz.ai}" \
+            "VOBIZ_AUTH_ID=${VOBIZ_AUTH_ID}" \
+            "VOBIZ_AUTH_TOKEN=${VOBIZ_AUTH_TOKEN}" \
+            "ADMIN_PHONE=${ADMIN_PHONE}" \
             "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
             "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
-            "AWS_REGION=ap-south-1" \
-            "S3_BUCKET_NAME=fettle-media" \
+            "AWS_REGION=${AWS_REGION:-ap-south-1}" \
+            "S3_BUCKET_NAME=${S3_BUCKET_NAME:-fettle-media}" \
+            "PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID}" \
+            "PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET}" \
+            "PAYPAL_API_BASE=${PAYPAL_API_BASE:-https://api-m.sandbox.paypal.com}" \
+            "CONSULTATION_PRICE_USD=${CONSULTATION_PRICE_USD:-15.00}" \
             "JWT_SECRET_KEY=${JWT_SECRET_KEY}" \
+            "ADMIN_USERNAME=${ADMIN_USERNAME}" \
+            "ADMIN_PASSWORD=${ADMIN_PASSWORD}" \
             "INTERNAL_API_SHARED_SECRET=${INTERNAL_API_SHARED_SECRET}" \
+            "LEGACY_AUTH_SECRET=${LEGACY_AUTH_SECRET}" \
             "INTERNAL_API_BASE_URL=http://api:8000" \
+            "PDF_DELIVERY_PUBLIC_BASE_URL=${PDF_DELIVERY_PUBLIC_BASE_URL}" \
+            "PDF_DELIVERY_TOKEN_SECRET=${PDF_DELIVERY_TOKEN_SECRET}" \
+            "FETTLE_BACKEND_URL=${FETTLE_BACKEND_URL}" \
+            "FETTLE_SYNC_ENABLED=${FETTLE_SYNC_ENABLED:-false}" \
+            "FETTLE_SYNC_SECRET=${FETTLE_SYNC_SECRET}" \
             "REDIS_URL=redis://redis:6379/0" \
             "CELERY_BROKER_URL=redis://redis:6379/0" \
             "CELERY_RESULT_BACKEND=redis://redis:6379/0" > .vps.env
@@ -183,12 +286,15 @@ jobs:
           ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" "
             set -euo pipefail
             cd '${APP_DIR}'
-            docker network inspect main-network >/dev/null 2>&1 || docker network create main-network
             echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin
             docker compose --env-file .env -f docker-compose.staging.yml pull
             docker compose --env-file .env -f docker-compose.staging.yml up -d --remove-orphans
             docker image prune -af --filter 'until=24h' || true
 
+            sudo mkdir -p \"\$(dirname '${SSL_CERT_PATH}')\" \"\$(dirname '${SSL_KEY_PATH}')\"
+            if [ ! -s '${SSL_CERT_PATH}' ] || [ ! -s '${SSL_KEY_PATH}' ]; then
+              sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout '${SSL_KEY_PATH}' -out '${SSL_CERT_PATH}' -subj '/CN=${SERVER_NAME}'
+            fi
             sudo mv '/tmp/${APP_NAME}-staging.conf' '/etc/nginx/conf.d/${APP_NAME}-staging.conf'
             sudo nginx -t
             sudo nginx -s reload || sudo systemctl reload nginx

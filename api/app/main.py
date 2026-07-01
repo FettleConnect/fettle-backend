@@ -20,14 +20,8 @@ from api.app.transcribe.repositories.sqlalchemy import (
 from api.app.transcribe.services.fettle_sync import FettleSyncService
 from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
 from api.app.transcribe.services.sessions import SessionService
-
-try:
-    from api.app.views.admin import router as admin_router
-    from api.app.views.admin import subdomain_router as admin_subdomain_router
-except ImportError:  # pragma: no cover - admin module is not present on this branch
-    admin_router = None
-    admin_subdomain_router = None
-
+from api.app.views.admin import router as admin_router
+from api.app.views.admin import subdomain_router as admin_subdomain_router
 from api.app.views.v1.auth import router as auth_router
 from api.app.views.v1.chatbot import router as chatbot_router
 from api.app.views.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router
@@ -112,11 +106,9 @@ app.add_middleware(
 _V1 = "/api/v1"
 
 app.include_router(health_router)
-if admin_subdomain_router is not None:
-    app.include_router(admin_subdomain_router)
-if admin_router is not None:
-    app.include_router(admin_router)
 app.include_router(pwa_transcribe_router)
+app.include_router(admin_subdomain_router)
+app.include_router(admin_router)
 # Legacy-compatible routes — mounted at root to match what the frontend calls
 app.include_router(google_auth_router)
 app.include_router(legacy_compat_router)

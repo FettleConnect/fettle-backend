@@ -429,6 +429,7 @@ class TestMediVoiceSync:
         from api.app.models.auth import User
 
         doctor = await db_session.scalar(select(User).where(User.id == doctor_id))
+        assert doctor is not None
 
         secret = os.environ.get("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
         resp = await async_client.post(

@@ -260,14 +260,15 @@ async def post_inbound_feedback(
                 department=inbound_call.department,
             )
         )
-        admin_phone = os.getenv("ADMIN_PHONE", "+917032451866")
-        _notify_escalation_bg(
-            org_name="",
-            mobile=inbound_call.from_phone_number or "",
-            issue=body.remarks or "Inbound Escalation",
-            call_type="Inbound Escalation",
-            to_number=admin_phone,
-        )
+        admin_phone = os.getenv("ADMIN_PHONE", "")
+        if admin_phone:
+            _notify_escalation_bg(
+                org_name="",
+                mobile=inbound_call.from_phone_number or "",
+                issue=body.remarks or "Inbound Escalation",
+                call_type="Inbound Escalation",
+                to_number=admin_phone,
+            )
 
     return SimpleOkResponse(msg="Call feedback saved successfully")
 
@@ -382,7 +383,9 @@ def _notify_escalation_bg(
 
     from api.app.services.whatsapp import send_whatsapp
 
-    admin_phone = to_number or os.getenv("ADMIN_PHONE") or "+917032451866"
+    admin_phone = to_number or os.getenv("ADMIN_PHONE")
+    if not admin_phone:
+        return
 
     async def _send() -> None:
         await send_whatsapp(

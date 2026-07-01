@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from api.app.schemas.auth import (
     TokenResponse,
     ValidateTokenResponse,
 )
+from api.app.services.tenant import resolve_organization_from_subdomain
 from api.app.views.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -21,14 +22,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> TokenResponse:
-    result = await session.execute(
-        select(User).where(
-            User.email == body.email,
-            User.is_active.is_(True),
+    tenant_org = await resolve_organization_from_subdomain(request, session)
+
+    if body.username:
+        if tenant_org is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tenant subdomain is required for username login",
+            )
+        result = await session.execute(
+            select(User).where(
+                User.organization_id == tenant_org.id,
+                User.username == body.username,
+                User.is_active.is_(True),
+            )
         )
-    )
+    else:
+        conditions = [User.email == body.email, User.is_active.is_(True)]
+        if tenant_org is not None:
+            conditions.append(User.organization_id == tenant_org.id)
+        result = await session.execute(select(User).where(*conditions))
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(body.password, user.password_hash):

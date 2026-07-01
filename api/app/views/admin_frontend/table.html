@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fettle Admin Table</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css" />
+  <script src="/admin/assets/table.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/admin">Fettle Admin</a>
+    <nav>
+      <a href="/admin">Dashboard</a>
+      <a href="/admin/hospitals">Hospitals</a>
+      <a href="/admin/corporate">Corporate</a>
+      <a class="active" href="/admin/tables">Database</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Table</p>
+        <h1 id="table-title">Table</h1>
+      </div>
+      <a class="button-link secondary" href="/admin/tables">All tables</a>
+    </header>
+    <div class="split-layout">
+      <section class="panel data-panel">
+        <div class="section-heading">
+          <h2>Rows</h2>
+          <div class="toolbar">
+            <button id="prev-page" type="button" class="secondary">Previous</button>
+            <button id="next-page" type="button" class="secondary">Next</button>
+            <button id="new-row" type="button">New row</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="rows"><thead></thead><tbody></tbody></table>
+        </div>
+      </section>
+      <section class="panel editor-panel">
+        <div class="section-heading">
+          <h2 id="editor-title">Row editor</h2>
+        </div>
+        <form id="row-form" class="single-column">
+          <textarea id="row-json" rows="24" spellcheck="false"></textarea>
+          <div class="toolbar">
+            <button id="save-row" type="submit">Save</button>
+            <button id="delete-row" type="button" class="danger">Delete</button>
+          </div>
+        </form>
+        <p id="editor-help" class="muted"></p>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fettle Admin</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css" />
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/admin">Fettle Admin</a>
+    <nav>
+      <a class="active" href="/admin">Dashboard</a>
+      <a href="/admin/hospitals">Hospitals</a>
+      <a href="/admin/corporate">Corporate</a>
+      <a href="/admin/tables">Database</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Platform</p>
+        <h1>Dashboard</h1>
+      </div>
+      <a class="button-link secondary" href="/admin/hospitals">Manage hospitals</a>
+    </header>
+    <section class="metric-grid" id="metrics"></section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Hospitals</h2>
+        <a href="/admin/hospitals">View all</a>
+      </div>
+      <div class="table-scroll">
+        <table id="hospital-summary">
+          <thead>
+            <tr><th>Hospital</th><th>Patients</th><th>Doctors</th><th>Users</th><th>Calls</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fettle Admin Hospitals</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css" />
+  <script src="/admin/assets/hospitals.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/admin">Fettle Admin</a>
+    <nav>
+      <a href="/admin">Dashboard</a>
+      <a class="active" href="/admin/hospitals">Hospitals</a>
+      <a href="/admin/corporate">Corporate</a>
+      <a href="/admin/tables">Database</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Clients</p>
+        <h1>Hospitals</h1>
+      </div>
+    </header>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Add hospital</h2>
+      </div>
+      <form id="hospital-form">
+        <input name="name" placeholder="Hospital name" required />
+        <input name="slug" placeholder="slug" required />
+        <input name="subdomain" placeholder="subdomain" required />
+        <input type="hidden" name="type" value="hospital" />
+        <button>Create</button>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Hospital List</h2>
+      </div>
+      <div class="table-scroll">
+        <table id="hospitals">
+          <thead>
+            <tr><th>Hospital</th><th>Subdomain</th><th>Patients</th><th>Doctors</th><th>Users</th><th>Inbound</th><th>Outbound</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

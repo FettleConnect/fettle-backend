@@ -5,6 +5,7 @@ import os
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Generator
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
@@ -25,7 +26,10 @@ _set_test_default("JWT_SECRET_KEY", "test-secret-key-at-least-32-chars-long!!")
 os.environ["DEBUG"] = "false"
 os.environ["DATABASE_URL"] = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
+    os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:postgres@localhost:5432/fettle_test",
+    ),
 )
 _set_test_default("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
 _set_test_default("INTERNAL_API_BASE_URL", "http://test")
@@ -50,10 +54,13 @@ _set_test_default("PDF_DELIVERY_TOKEN_SECRET", "test-pdf-delivery-secret")
 _set_test_default("FETTLE_SYNC_ENABLED", "false")
 _set_test_default("FETTLE_BACKEND_URL", "http://127.0.0.1:1")
 _set_test_default("FETTLE_SYNC_SECRET", "test-secret")
+_set_test_default("ADMIN_USERNAME", "platform-admin")
+_set_test_default("ADMIN_PASSWORD", "platform-admin-password")
 
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
+from api.app.db.transcribe import get_db_session  # noqa: E402
 from api.app.main import app  # noqa: E402
 from api.app.transcribe.bootstrap import (  # noqa: E402
     reset_transcribe_runtime_state,
@@ -124,13 +131,6 @@ requires_db = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope="session")
 async def db_engine():
     if not _POSTGRES_AVAILABLE:
@@ -159,6 +159,8 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
         autoflush=False,
     )
     session = async_session_maker()
+    await seed_transcribe_defaults(session)
+    await reset_transcribe_runtime_state(session)
     yield session
     await session.rollback()
     await session.close()
@@ -187,24 +189,49 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
     app.dependency_overrides.pop(get_async_session, None)
 
 
-@pytest.fixture
-def sync_client() -> TestClient:
-    """Synchronous WSGI-style test client for simple endpoint tests (no DB seed needed)."""
-    return TestClient(app)
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _seed_transcribe_defaults(
-    db_session: AsyncSession,
-) -> AsyncGenerator[None, None]:
-    await seed_transcribe_defaults(db_session)
-    await reset_transcribe_runtime_state(db_session)
-    yield
+@pytest_asyncio.fixture
+async def async_client_no_db() -> AsyncGenerator[AsyncClient, None]:
+    """Async HTTPX client for routes that do not touch database dependencies."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        yield ac
 
 
 @pytest.fixture
-def client(sync_client: TestClient) -> TestClient:
-    return sync_client
+def sync_client() -> Generator[TestClient, None, None]:
+    """Synchronous client for routes that do not need database overrides."""
+    client = TestClient(app)
+    yield client
+    client.close()
+
+
+@pytest.fixture
+def client(db_engine) -> Generator[TestClient, None, None]:
+    """Synchronous client backed by the same test DB overrides as async_client."""
+    async_session_maker = async_sessionmaker(
+        bind=db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+    session = async_session_maker()
+
+    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
+        yield session
+        await session.flush()
+
+    app.dependency_overrides[get_async_session] = _override_session
+    app.dependency_overrides[get_db_session] = _override_session
+    asyncio.run(seed_transcribe_defaults(session))
+    asyncio.run(reset_transcribe_runtime_state(session))
+    client = TestClient(app)
+    yield client
+    client.close()
+    app.dependency_overrides.pop(get_async_session, None)
+    app.dependency_overrides.pop(get_db_session, None)
+    asyncio.run(session.rollback())
+    asyncio.run(session.close())
 
 
 # ── Reusable test data factories ──────────────────────────────────────────────
