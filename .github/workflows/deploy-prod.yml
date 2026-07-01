@@ -21,13 +21,17 @@ jobs:
         env:
           APP_BIND_PORT: ${{ secrets.APP_BIND_PORT }}
           PUBLIC_PORT: ${{ secrets.PUBLIC_PORT }}
+          SSL_PORT: ${{ secrets.SSL_PORT }}
           SERVER_NAME: ${{ secrets.SERVER_NAME }}
         run: |
           APP_NAME="${APP_NAME:-${GITHUB_REPOSITORY##*/}}"
           APP_BIND_PORT="${APP_BIND_PORT:-8000}"
           PUBLIC_PORT="${PUBLIC_PORT:-80}"
+          SSL_PORT="${SSL_PORT:-443}"
           SERVER_NAME="${SERVER_NAME:-_}"
           IMAGE_TAG="${GITHUB_REF_NAME}"
+          SSL_CERT_PATH="/etc/ssl/certs/${APP_NAME}.crt"
+          SSL_KEY_PATH="/etc/ssl/private/${APP_NAME}.key"
 
           echo "APP_NAME=${APP_NAME}" >> "$GITHUB_ENV"
           echo "APP_DIR=/opt/${APP_NAME}" >> "$GITHUB_ENV"
@@ -36,6 +40,9 @@ jobs:
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
           echo "APP_BIND_PORT=${APP_BIND_PORT}" >> "$GITHUB_ENV"
           echo "PUBLIC_PORT=${PUBLIC_PORT}" >> "$GITHUB_ENV"
+          echo "SSL_PORT=${SSL_PORT}" >> "$GITHUB_ENV"
+          echo "SSL_CERT_PATH=${SSL_CERT_PATH}" >> "$GITHUB_ENV"
+          echo "SSL_KEY_PATH=${SSL_KEY_PATH}" >> "$GITHUB_ENV"
           echo "SERVER_NAME=${SERVER_NAME}" >> "$GITHUB_ENV"
 
       - name: Validate production deployment secrets
@@ -105,6 +112,8 @@ jobs:
           PROD_PORT: ${{ secrets.PROD_PORT }}
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          LIVEKIT_NODE_IP: ${{ secrets.LIVEKIT_NODE_IP }}
+          LIVEKIT_USE_EXTERNAL_IP: ${{ secrets.LIVEKIT_USE_EXTERNAL_IP }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           ssh -p "${PROD_PORT:-22}" "${PROD_USER}@${PROD_HOST}" "mkdir -p \"${APP_DIR}\""
@@ -112,10 +121,13 @@ jobs:
           scp -P "${PROD_PORT:-22}" deploy/prod/sip.yaml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/sip.yaml"
           python - <<'PY'
           from pathlib import Path
+          import json
           import os
 
           livekit_api_key = os.environ["LIVEKIT_API_KEY"]
           livekit_api_secret = os.environ["LIVEKIT_API_SECRET"]
+          livekit_node_ip = os.environ.get("LIVEKIT_NODE_IP") or "0.0.0.0"
+          livekit_use_external_ip = os.environ.get("LIVEKIT_USE_EXTERNAL_IP") or "true"
 
           Path(".livekit.yaml").write_text(
               "\n".join(
@@ -127,11 +139,11 @@ jobs:
                       f"  {livekit_api_key}: {livekit_api_secret}",
                       "",
                       "rtc:",
-                      "  node_ip: 0.0.0.0",
+                      f"  node_ip: {json.dumps(livekit_node_ip)}",
                       "  tcp_port: 7881",
                       "  port_range_start: 50000",
                       "  port_range_end: 60000",
-                      "  use_external_ip: true",
+                      f"  use_external_ip: {livekit_use_external_ip}",
                       "",
                       "redis:",
                       "  address: redis:6379",
@@ -144,7 +156,7 @@ jobs:
           )
           PY
           scp -P "${PROD_PORT:-22}" .livekit.yaml "${PROD_USER}@${PROD_HOST}:${APP_DIR}/livekit.yaml"
-          envsubst '${APP_NAME} ${APP_BIND_PORT} ${PUBLIC_PORT} ${SERVER_NAME}' < deploy/prod/nginx/site.conf.template > .site.conf
+          envsubst '${APP_NAME} ${APP_BIND_PORT} ${PUBLIC_PORT} ${SSL_PORT} ${SSL_CERT_PATH} ${SSL_KEY_PATH} ${SERVER_NAME}' < deploy/prod/nginx/site.conf.template > .site.conf
           scp -P "${PROD_PORT:-22}" .site.conf "${PROD_USER}@${PROD_HOST}:/tmp/${APP_NAME}.conf"
 
       - name: Deploy on production
@@ -204,6 +216,9 @@ jobs:
             "AGENT_IMAGE=${AGENT_IMAGE}:${IMAGE_TAG}" \
             "APP_BIND_PORT=${APP_BIND_PORT}" \
             "PUBLIC_PORT=${PUBLIC_PORT}" \
+            "SSL_PORT=${SSL_PORT}" \
+            "SSL_CERT_PATH=${SSL_CERT_PATH}" \
+            "SSL_KEY_PATH=${SSL_KEY_PATH}" \
             "SERVER_NAME=${SERVER_NAME}" \
             "DATABASE_URL=${DATABASE_URL}" \
             "LIVEKIT_URL=http://livekit-server:7880" \
@@ -266,6 +281,10 @@ jobs:
             docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -af --filter 'until=24h' || true
 
+            sudo mkdir -p \"\$(dirname '${SSL_CERT_PATH}')\" \"\$(dirname '${SSL_KEY_PATH}')\"
+            if [ ! -s '${SSL_CERT_PATH}' ] || [ ! -s '${SSL_KEY_PATH}' ]; then
+              sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout '${SSL_KEY_PATH}' -out '${SSL_CERT_PATH}' -subj '/CN=${SERVER_NAME}'
+            fi
             sudo mv '/tmp/${APP_NAME}.conf' '/etc/nginx/conf.d/${APP_NAME}.conf'
             sudo nginx -t
             sudo nginx -s reload || sudo systemctl reload nginx
