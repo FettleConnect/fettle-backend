@@ -1,7 +1,7 @@
 """expand_transcribe_report_context_state
 
 Revision ID: 1c2f4e6a8b9d
-Revises: a4e9c7f6d2b1
+Revises: b7c3a9d4e5f6
 Create Date: 2026-06-30 09:45:00.000000
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "1c2f4e6a8b9d"
-down_revision: Union[str, None] = "a4e9c7f6d2b1"
+down_revision: Union[str, None] = "b7c3a9d4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
