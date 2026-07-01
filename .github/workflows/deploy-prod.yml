@@ -12,7 +12,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - name: Checkout
@@ -38,6 +37,24 @@ jobs:
           echo "APP_BIND_PORT=${APP_BIND_PORT}" >> "$GITHUB_ENV"
           echo "PUBLIC_PORT=${PUBLIC_PORT}" >> "$GITHUB_ENV"
           echo "SERVER_NAME=${SERVER_NAME}" >> "$GITHUB_ENV"
+
+      - name: Validate production deployment secrets
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+        run: |
+          missing=()
+          for name in PROD_SSH_PRIVATE_KEY PROD_HOST PROD_USER; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required production deployment secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Configure these as GitHub Actions repository secrets.\n' >&2
+            exit 1
+          fi
 
       - name: Install envsubst
         run: sudo apt-get update && sudo apt-get install -y gettext-base

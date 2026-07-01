@@ -12,7 +12,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: staging
 
     steps:
       - name: Checkout
@@ -38,6 +37,24 @@ jobs:
           echo "APP_BIND_PORT=${APP_BIND_PORT}" >> "$GITHUB_ENV"
           echo "PUBLIC_PORT=${PUBLIC_PORT}" >> "$GITHUB_ENV"
           echo "SERVER_NAME=${SERVER_NAME}" >> "$GITHUB_ENV"
+
+      - name: Validate staging deployment secrets
+        env:
+          STAGING_VPS_SSH_PRIVATE_KEY: ${{ secrets.STAGING_VPS_SSH_PRIVATE_KEY }}
+          STAGING_VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
+          STAGING_VPS_USER: ${{ secrets.STAGING_VPS_USER }}
+        run: |
+          missing=()
+          for name in STAGING_VPS_SSH_PRIVATE_KEY STAGING_VPS_HOST STAGING_VPS_USER; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required staging deployment secret(s): %s\n' "${missing[*]}" >&2
+            printf 'Configure these as GitHub Actions repository secrets.\n' >&2
+            exit 1
+          fi
 
       - name: Install envsubst
         run: sudo apt-get update && sudo apt-get install -y gettext-base
