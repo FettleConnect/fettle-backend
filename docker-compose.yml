@@ -9,8 +9,14 @@ services:
     env_file:
       - .env
     environment:
+      DEBUG: "false"
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_dev
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test-openai-key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-test-openrouter-key}
+      SONIOX_API_KEY: ${SONIOX_API_KEY:-test-soniox-key}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -37,8 +43,10 @@ services:
     env_file:
       - .env
     environment:
+      DEBUG: "false"
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_test
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
+      SONIOX_API_KEY: ${SONIOX_API_KEY:-test-soniox-key}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -69,8 +77,14 @@ services:
     env_file:
       - .env
     environment:
+      DEBUG: "false"
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/fettle_dev
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-key-change-me-32-chars}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test-openai-key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-test-openrouter-key}
+      SONIOX_API_KEY: ${SONIOX_API_KEY:-test-soniox-key}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -95,6 +109,11 @@ services:
     environment:
       INTERNAL_API_BASE_URL: http://api:8000
       LIVEKIT_URL_INTERNAL: http://livekit-server:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test-openai-key}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-test-openrouter-key}
+      SONIOX_API_KEY: ${SONIOX_API_KEY:-test-soniox-key}
     depends_on:
       api:
         condition: service_healthy
@@ -112,8 +131,8 @@ services:
       - .env
     environment:
       SIP_CONFIG_BODY: |
-        api_key: ${LIVEKIT_API_KEY}
-        api_secret: ${LIVEKIT_API_SECRET}
+        api_key: ${LIVEKIT_API_KEY:-devkey}
+        api_secret: ${LIVEKIT_API_SECRET:-secret}
         ws_url: ws://livekit-server:7880
         redis:
           address: redis:6379
@@ -139,7 +158,7 @@ services:
     image: livekit/livekit-server:latest
     command: --dev --bind 0.0.0.0 --redis-host redis:6379
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
       LIVEKIT_LOG_LEVEL: ${LIVEKIT_LOG_LEVEL:-info}
     ports:
       - "7880:7880"

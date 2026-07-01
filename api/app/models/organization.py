@@ -11,7 +11,7 @@ from api.app.models.base import TimestampMixin
 
 
 class Organization(TimestampMixin, Base):
-    """Unified tenant record — covers hospitals, corporate clients, and clinical tenants."""
+    """Unified tenant record — covers hospitals and corporate clients."""
 
     __tablename__ = "organizations"
 
@@ -22,7 +22,10 @@ class Organization(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(
         String(100), unique=True, nullable=False, index=True
     )
-    # Discriminator: "hospital" | "corporate" | "clinical"
+    subdomain: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True, index=True
+    )
+    # Discriminator: "hospital" | "corporate"
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

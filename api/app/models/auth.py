@@ -46,6 +46,7 @@ class User(TimestampMixin, Base):
         index=True,
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -84,4 +85,5 @@ class User(TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
+        UniqueConstraint("organization_id", "username", name="uq_users_org_username"),
     )

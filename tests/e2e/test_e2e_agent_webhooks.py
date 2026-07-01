@@ -171,6 +171,7 @@ class TestVobizOutboundWebhookFlow:
         refreshed = await db_session.scalar(
             select(OutboundCall).where(OutboundCall.id == call.id)
         )
+        assert refreshed is not None
         assert refreshed.calling_process == "connected"
         assert refreshed.status == "ended"
 

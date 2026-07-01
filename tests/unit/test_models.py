@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import cast
+
+from sqlalchemy.sql.schema import Table
+
 
 class TestModelsImportable:
     def test_import_all_models(self) -> None:
@@ -203,7 +207,8 @@ class TestUserModel:
     def test_unique_constraint_on_org_email(self) -> None:
         from api.app.models.auth import User
 
-        constraint_names = {c.name for c in User.__table__.constraints}
+        table = cast(Table, User.__table__)
+        constraint_names = {c.name for c in table.constraints}
         assert "uq_users_org_email" in constraint_names
 
 
@@ -216,7 +221,8 @@ class TestPatientModel:
     def test_unique_constraint_on_org_mobile_dept_date(self) -> None:
         from api.app.models.hospital.patient import Patient
 
-        constraint_names = {c.name for c in Patient.__table__.constraints}
+        table = cast(Table, Patient.__table__)
+        constraint_names = {c.name for c in table.constraints}
         assert "uq_patient_org_mobile_dept_date" in constraint_names
 
 
@@ -263,7 +269,8 @@ class TestCorporateModels:
     def test_post_like_unique_constraint(self) -> None:
         from api.app.models.corporate.social import PostLike
 
-        constraint_names = {c.name for c in PostLike.__table__.constraints}
+        table = cast(Table, PostLike.__table__)
+        constraint_names = {c.name for c in table.constraints}
         assert "uq_post_like_post_user" in constraint_names
 
     def test_body_composition_has_bmi(self) -> None:

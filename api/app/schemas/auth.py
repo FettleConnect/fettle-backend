@@ -2,19 +2,31 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from api.app.schemas.hospital.transcribe import DoctorProfile, PublicDoctorProfile
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: str | None = None
+    username: str | None = None
     password: str
 
     @field_validator("email", mode="before")
     @classmethod
-    def strip_email(cls, v: str) -> str:
-        return v.strip().lower()
+    def strip_email(cls, v: str | None) -> str | None:
+        return v.strip().lower() if v else None
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def strip_username(cls, v: str | None) -> str | None:
+        return v.strip().lower() if v else None
+
+    @model_validator(mode="after")
+    def require_identifier(self) -> "LoginRequest":
+        if not self.email and not self.username:
+            raise ValueError("email or username is required")
+        return self
 
 
 class TokenResponse(BaseModel):
