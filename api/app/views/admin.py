@@ -30,23 +30,23 @@ from api.app.models.hospital.call import InboundCall, OutboundCall
 from api.app.models.hospital.patient import Patient
 from api.app.models.organization import CorporateConfig, HospitalConfig, Organization
 from api.app.schemas.admin import (
+    AdminDashboardMetrics,
     AdminDbColumn,
     AdminDbDelete,
     AdminDbMutation,
     AdminDbRows,
     AdminDbTable,
     AdminDbUpdate,
-    AdminDashboardMetrics,
-    HospitalAdminDetail,
     AdminLoginRequest,
     AdminTokenResponse,
+    HospitalAdminDetail,
     HospitalAdminSummary,
     HospitalUserAdminIn,
     OrganizationAdminIn,
     OrganizationAdminOut,
-    UserPasswordAdminIn,
     UserAdminIn,
     UserAdminOut,
+    UserPasswordAdminIn,
 )
 from api.app.services.tenant import is_admin_subdomain
 
