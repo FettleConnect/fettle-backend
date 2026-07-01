@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -872,7 +873,7 @@ class SessionService:
             )
             if job_id is not None:
                 progress_chunks[:] = self._serialize_report_context_chunks(
-                    progress.extracted_chunks, normalized_upload_ids
+                    progress.extracted_chunks, serialized_upload_ids
                 )
                 await self.repository.update_report_context_job_state(
                     job_id,
@@ -978,6 +979,9 @@ class SessionService:
                         detail=ErrorResponse(message="Session not found.").model_dump(),
                     )
                 return current_session
+            successful_upload_ids = self._report_context_upload_ids_for_chunks(
+                exc.partial_chunks, serialized_upload_ids
+            )
             ready_state = {
                 "status": "ready",
                 "selectedChunkIds": [],
@@ -993,7 +997,7 @@ class SessionService:
                             if session.reportContext
                             else []
                         ),
-                        *normalized_upload_ids,
+                        *successful_upload_ids,
                     }
                 ),
                 "progress": {
@@ -1010,7 +1014,7 @@ class SessionService:
             updated = await self.repository.finalize_report_context_extraction(
                 session_id,
                 doctor_id,
-                normalized_upload_ids,
+                successful_upload_ids,
                 self._serialize_report_context_chunks(
                     exc.partial_chunks, serialized_upload_ids
                 ),
@@ -1124,7 +1128,7 @@ class SessionService:
         self,
         session: ConsultationSession,
         chunk_ids: list[str],
-        custom_chunks: list[dict],
+        custom_chunks: list[Any],
         *,
         reject_applied: bool,
     ):
@@ -1138,12 +1142,7 @@ class SessionService:
         selected = [
             chunk for chunk in session.reportContext.chunks if chunk.id in chunk_ids
         ]
-        selected.extend(
-            [
-                ReportContextChunk.model_validate(chunk)
-                for chunk in (custom_chunks or [])
-            ]
-        )
+        selected.extend(self._coerce_custom_report_context_chunks(custom_chunks or []))
         if not selected:
             raise HTTPException(
                 status_code=400,
@@ -1162,6 +1161,46 @@ class SessionService:
                     ).model_dump(),
                 )
         return selected
+
+    def _coerce_custom_report_context_chunks(
+        self, custom_chunks: list[Any]
+    ) -> list[ReportContextChunk]:
+        extracted_at = datetime.now(UTC)
+        normalized: list[ReportContextChunk] = []
+        for chunk in custom_chunks:
+            if isinstance(chunk, str):
+                text = chunk.strip()
+                if not text:
+                    continue
+                normalized.append(
+                    ReportContextChunk(
+                        id=str(uuid.uuid4()),
+                        sourceFileName="Custom note",
+                        title="Custom note",
+                        category="custom_note",
+                        text=text,
+                        extractedAt=extracted_at,
+                        label="Custom note",
+                    )
+                )
+                continue
+            normalized.append(ReportContextChunk.model_validate(chunk))
+        return normalized
+
+    def _report_context_upload_ids_for_chunks(
+        self,
+        chunks: list[ReportContextChunk],
+        upload_ids: list[str],
+    ) -> list[str]:
+        selected_upload_ids: list[str] = []
+        for chunk in chunks:
+            source_index = chunk.sourceIndex or 0
+            if source_index < 0 or source_index >= len(upload_ids):
+                continue
+            upload_id = upload_ids[source_index]
+            if upload_id not in selected_upload_ids:
+                selected_upload_ids.append(upload_id)
+        return selected_upload_ids
 
     def _estimate_report_context_units(
         self, uploads: list[StoredReportContextUpload]
