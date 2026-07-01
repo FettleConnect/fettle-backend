@@ -1,6 +1,6 @@
 server {
   listen ${PUBLIC_PORT};
-  server_name *.${SERVER_NAME};
+  server_name ${SERVER_NAME} *.${SERVER_NAME};
 
   client_max_body_size 20m;
 

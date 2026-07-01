@@ -33,6 +33,11 @@ async def send_whatsapp(
     to = _e164(to_number)
     vobiz_token = os.environ.get("VOBIZ_AUTH_TOKEN", "")
     vobiz_id = os.environ.get("VOBIZ_AUTH_ID", "")
+    if not vobiz_id or not vobiz_token:
+        return {
+            "error": 1,
+            "errorMsg": "VOBIZ_AUTH_ID and VOBIZ_AUTH_TOKEN must be configured",
+        }
     headers = {
         "X-Auth-ID": vobiz_id,
         "X-Auth-Token": vobiz_token,

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Generator
 from pathlib import Path
+from typing import Generator
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
@@ -60,7 +59,6 @@ _set_test_default("ADMIN_PASSWORD", "platform-admin-password")
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
-from api.app.db.transcribe import get_db_session  # noqa: E402
 from api.app.main import app  # noqa: E402
 from api.app.services.transcribe.bootstrap import (  # noqa: E402
     reset_transcribe_runtime_state,
@@ -199,31 +197,11 @@ async def async_client_no_db() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-def sync_client(db_engine) -> Generator[TestClient, None, None]:
-    """Synchronous test client backed by the same test DB override as async_client."""
-    async_session_maker = async_sessionmaker(
-        bind=db_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-    session = async_session_maker()
-
-    async def _override_session() -> AsyncGenerator[AsyncSession, None]:
-        yield session
-        await session.flush()
-
-    app.dependency_overrides[get_async_session] = _override_session
-    app.dependency_overrides[get_db_session] = _override_session
-    asyncio.run(seed_transcribe_defaults(session))
-    asyncio.run(reset_transcribe_runtime_state(session))
+def sync_client() -> Generator[TestClient, None, None]:
+    """Synchronous client for routes that do not need database overrides."""
     client = TestClient(app)
     yield client
     client.close()
-    app.dependency_overrides.pop(get_async_session, None)
-    app.dependency_overrides.pop(get_db_session, None)
-    asyncio.run(session.rollback())
-    asyncio.run(session.close())
 
 
 @pytest.fixture

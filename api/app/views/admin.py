@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import secrets
 import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -52,7 +53,7 @@ from api.app.services.tenant import is_admin_subdomain
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 subdomain_router = APIRouter(tags=["admin"])
-admin_bearer = HTTPBearer()
+admin_bearer = HTTPBearer(auto_error=False)
 _FRONTEND_DIR = Path(__file__).resolve().parent / "admin_frontend"
 _ADMIN_INDEX = _FRONTEND_DIR / "index.html"
 _ADMIN_LOGIN = _FRONTEND_DIR / "login.html"
@@ -75,8 +76,14 @@ class _PermissionInput(Protocol):
 
 
 async def get_current_platform_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(admin_bearer),
+    credentials: HTTPAuthorizationCredentials | None = Depends(admin_bearer),
 ) -> str:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication credentials were not provided",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = decode_admin_token(credentials.credentials)
     except TokenError as exc:
@@ -714,7 +721,7 @@ async def _ensure_default_hospital_admin(
             organization_id=org.id,
             email=_default_user_email(org.id, "admin"),
             username="admin",
-            password_hash=hash_password("admin"),
+            password_hash=hash_password(secrets.token_urlsafe(32)),
             name="Admin",
             role="hospital_admin",
             is_active=True,

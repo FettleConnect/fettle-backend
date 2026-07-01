@@ -47,7 +47,9 @@ def extract_subdomain(request: Request) -> str | None:
 
 
 def _request_host(request: Request) -> str:
-    return request.headers.get("host", "").split(":", 1)[0].strip().lower()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0]
+    host = forwarded_host or request.headers.get("host", "")
+    return host.split(":", 1)[0].strip().lower()
 
 
 def _normalize_subdomain(value: str) -> str | None:
