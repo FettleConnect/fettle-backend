@@ -4,6 +4,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
@@ -198,7 +199,7 @@ async def async_client_no_db() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-def sync_client(db_engine) -> TestClient:
+def sync_client(db_engine) -> Generator[TestClient, None, None]:
     """Synchronous test client backed by the same test DB override as async_client."""
     async_session_maker = async_sessionmaker(
         bind=db_engine,

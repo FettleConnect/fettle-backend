@@ -170,6 +170,7 @@ class TestVobizOutboundWebhook:
         updated = await db_session.scalar(
             select(OutboundCall).where(OutboundCall.id == call.id)
         )
+        assert updated is not None
         assert updated.calling_process == "connected"
         assert updated.status == "ended"
 

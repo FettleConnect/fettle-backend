@@ -6,13 +6,13 @@ import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import delete, func, insert, or_, select, update
-from sqlalchemy.engine import RowMapping
+from sqlalchemy.engine import CursorResult, RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.schema import Column, Table
 
@@ -62,6 +62,16 @@ _ADMIN_CORPORATE = _FRONTEND_DIR / "corporate.html"
 _ADMIN_TABLES = _FRONTEND_DIR / "tables.html"
 _ADMIN_TABLE = _FRONTEND_DIR / "table.html"
 _ADMIN_ASSETS = _FRONTEND_DIR / "assets"
+
+
+class _PermissionInput(Protocol):
+    perm_patient_engagement: bool
+    perm_community_engagement: bool
+    perm_revisit_engagement: bool
+    perm_escalation_engagement: bool
+    perm_calllog_engagement: bool
+    perm_upload_engagement: bool
+    perm_pdf_engagement: bool
 
 
 async def get_current_platform_admin(
@@ -464,8 +474,11 @@ async def update_user(
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    user.organization_id = _parse_org_id(body.organization_id)
-    user.email = body.email
+    organization_id = _parse_org_id(body.organization_id)
+    user.organization_id = organization_id
+    user.email = body.email or _default_user_email(
+        organization_id, body.username or "user"
+    )
     user.username = body.username
     user.name = body.name
     user.role = body.role
@@ -562,8 +575,11 @@ async def delete_db_row(
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     table = _get_admin_table(table_name)
-    result = await session.execute(
-        delete(table).where(*_primary_key_filters(table, body.pk))
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            delete(table).where(*_primary_key_filters(table, body.pk))
+        ),
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Row not found")
@@ -774,7 +790,7 @@ def _user_payload(user: User) -> UserAdminOut:
     )
 
 
-def _apply_permissions(user: User, body: UserAdminIn) -> None:
+def _apply_permissions(user: User, body: _PermissionInput) -> None:
     user.perm_patient_engagement = body.perm_patient_engagement
     user.perm_community_engagement = body.perm_community_engagement
     user.perm_revisit_engagement = body.perm_revisit_engagement
@@ -810,8 +826,8 @@ def _table_payload(table: Table) -> AdminDbTable:
                 name=column.name,
                 type=str(column.type),
                 primary_key=column.primary_key,
-                nullable=column.nullable,
-                default=str(column.default.arg) if column.default is not None else None,
+                nullable=bool(column.nullable),
+                default=_column_default(column),
             )
             for column in table.columns
         ],
@@ -862,9 +878,9 @@ def _coerce_value(column: Column[Any], value: object | None) -> Any:
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
     if python_type is int:
-        return int(value)
+        return int(cast(Any, value))
     if python_type is float:
-        return float(value)
+        return float(cast(Any, value))
     if python_type is Decimal:
         return Decimal(str(value))
     if python_type in {dict, list} and isinstance(value, str):
@@ -877,6 +893,14 @@ def _column_python_type(column: Column[Any]) -> type[Any] | None:
         return column.type.python_type
     except NotImplementedError:
         return None
+
+
+def _column_default(column: Column[Any]) -> str | None:
+    default = column.default
+    if default is None:
+        return None
+    default_arg = getattr(default, "arg", None)
+    return str(default_arg) if default_arg is not None else None
 
 
 def _serialize_row(row: RowMapping) -> dict[str, object | None]:
