@@ -178,11 +178,11 @@ class MockReportContextProvider(BaseReportContextProvider):
                 id=str(uuid.uuid4()),
                 sourceFileName=upload.file_name,
                 sourceIndex=index,
-                title="Uploaded report context",
+                title=_mock_report_chunk_title(upload),
                 category="Prior report",
-                text=f"Relevant clinical details were extracted from {upload.file_name}.",
+                text=_mock_report_chunk_text(upload),
                 extractedAt=extracted_at,
-                label="Uploaded report context",
+                label=_mock_report_chunk_title(upload),
             )
             for index, upload in enumerate(uploads)
         ]
@@ -205,20 +205,37 @@ class MockReportContextProvider(BaseReportContextProvider):
         current_draft: DraftConsultationDocument,
         selected_chunks: Sequence[ReportContextChunk],
     ) -> dict[str, Any]:
-        illness_history = "\n\n".join(
+        summary_addition = "\n".join(
             part
             for part in [
-                current_draft.illnessHistory,
-                "\n".join(f"{chunk.title}: {chunk.text}" for chunk in selected_chunks),
+                current_draft.clinicalSummary,
+                "\n".join(chunk.text for chunk in selected_chunks if chunk.text),
             ]
             if part
         )
         draft = current_draft.model_copy(deep=True)
-        draft.illnessHistory = illness_history or current_draft.illnessHistory
+        if summary_addition:
+            draft.clinicalSummary = summary_addition
         return {
             "draftDocument": draft.model_dump(exclude_none=True),
-            "changedFields": ["illnessHistory"] if illness_history else [],
+            "changedFields": ["clinicalSummary"] if summary_addition else [],
         }
+
+
+def _mock_report_chunk_title(upload: StoredReportContextUpload) -> str:
+    if upload.mime_type == "application/pdf":
+        return "Imported PDF report"
+    if upload.mime_type.startswith("image/"):
+        return "Imported scanned report image"
+    return "Uploaded report context"
+
+
+def _mock_report_chunk_text(upload: StoredReportContextUpload) -> str:
+    if upload.mime_type == "application/pdf":
+        return f"Imported PDF report '{upload.file_name}'."
+    if upload.mime_type.startswith("image/"):
+        return f"Imported scanned report image '{upload.file_name}'."
+    return f"Relevant clinical details were extracted from {upload.file_name}."
 
 
 class OpenAIReportContextProvider(BaseReportContextProvider):
