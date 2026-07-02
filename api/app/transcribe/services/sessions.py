@@ -511,6 +511,14 @@ class SessionService:
                     message="One or more report uploads could not be loaded."
                 ).model_dump(),
             )
+        started_at = datetime.now(UTC).isoformat()
+        processing_job = await self.repository.update_report_context_job_state(
+            str(job["id"]),
+            {
+                "status": "processing",
+                "startedAt": started_at,
+            },
+        )
         self._launch_background(
             self._complete_report_context_job(
                 session_id=session_id,
@@ -519,7 +527,7 @@ class SessionService:
                 job_id=str(job["id"]),
             )
         )
-        return ReportContextExtractionJob.model_validate(job)
+        return ReportContextExtractionJob.model_validate(processing_job or job)
 
     async def get_report_context_extraction_job(
         self,
@@ -682,13 +690,15 @@ class SessionService:
             session, chunk_ids, custom_chunks, reject_applied=True
         )
         try:
-            return await self.report_context_provider.suggest_draft(
+            suggestion = await self.report_context_provider.suggest_draft(
                 session_id,
                 DraftConsultationDocument.model_validate(
                     session.transcription.draftDocument.model_dump(exclude_none=True)
                 ),
                 selected,
             )
+            suggestion["chunkIds"] = chunk_ids
+            return suggestion
         except Exception as exc:
             message = (
                 str(exc)
