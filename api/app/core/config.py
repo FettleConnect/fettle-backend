@@ -58,6 +58,23 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o"
     openai_api_key: str = ""
+    openai_base_url: str = ""
+    openai_transcribe_model: str = "gpt-4o-transcribe"
+    openai_synthesis_model: str = "gpt-4.1-mini"
+    soniox_api_key: str = ""
+    soniox_base_url: str = ""
+    soniox_model: str = "stt-async-v5"
+    soniox_rt_model: str = "stt-rt-v4"
+    soniox_rt_ws_url: str = "wss://stt-rt.soniox.com/transcribe-websocket"
+    soniox_language_hints: list[str] = Field(default_factory=list)
+    ai_provider: str = "auto"
+    transcription_timeout_seconds: float = 180.0
+    soniox_poll_interval_seconds: float = 2.0
+    soniox_poll_timeout_seconds: float = 180.0
+    report_context_provider: str = "auto"
+    report_context_openai_model: str = "gpt-4.1-mini"
+    report_context_timeout_seconds: float = 30.0
+    report_context_max_units: int = 100
 
     # ------------------------------------------------------------------ Concurrency limits
     call_concurrency_limit: int = 3
@@ -96,6 +113,15 @@ class Settings(BaseSettings):
                 'Generate with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return v
+
+    @field_validator("soniox_language_hints", mode="before")
+    @classmethod
+    def _parse_soniox_language_hints(cls, value):
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
     @property
     def async_database_url(self) -> str:

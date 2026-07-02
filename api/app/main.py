@@ -1,17 +1,27 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.app.core.config import settings
+from api.app.core.config import Settings, settings
 from api.app.db.base import engine
 from api.app.routers.legacy_hospital import router as legacy_hospital_router
+from api.app.transcribe.api.router import router as pwa_transcribe_router
+from api.app.transcribe.bootstrap import seed_transcribe_defaults
+from api.app.transcribe.db import SessionFactory
+from api.app.transcribe.repositories.sqlalchemy import (
+    SqlSessionRepository,
+    SqlSyncRepository,
+)
+from api.app.transcribe.services.fettle_sync import FettleSyncService
+from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
+from api.app.transcribe.services.sessions import SessionService
 from api.app.views.admin import router as admin_router
 from api.app.views.admin import subdomain_router as admin_subdomain_router
-from api.app.views.pwa_transcript_compat import router as pwa_transcript_compat_router
 from api.app.views.v1.auth import router as auth_router
 from api.app.views.v1.chatbot import router as chatbot_router
 from api.app.views.v1.chatbot_compat import _GOOGLE_AUTH_ROUTER as google_auth_router
@@ -33,8 +43,44 @@ from api.app.views.v1.tenant import router as tenant_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    background_tasks: list[asyncio.Task] = []
+    async with SessionFactory() as session:
+        await seed_transcribe_defaults(session)
+        await SessionService(
+            SqlSessionRepository(session), settings
+        ).resume_pending_report_context_jobs()
+    if settings.fettle_sync_enabled:
+        background_tasks.append(asyncio.create_task(_run_fettle_sync_worker(settings)))
+    background_tasks.append(asyncio.create_task(_run_pdf_delivery_worker(settings)))
     yield
+    for task in background_tasks:
+        task.cancel()
+    for task in background_tasks:
+        with suppress(asyncio.CancelledError):
+            await task
     await engine.dispose()
+
+
+async def _run_fettle_sync_worker(settings: Settings) -> None:
+    while True:
+        try:
+            async with SessionFactory() as session:
+                service = FettleSyncService(SqlSyncRepository(session), settings)
+                await service.process_due_jobs(limit=10)
+        except Exception:
+            pass
+        await asyncio.sleep(max(settings.fettle_sync_retry_delay_seconds, 5.0))
+
+
+async def _run_pdf_delivery_worker(settings: Settings) -> None:
+    while True:
+        try:
+            async with SessionFactory() as session:
+                service = PdfDeliveryService(SqlSessionRepository(session), settings)
+                await service.process_pending_jobs(limit=10)
+        except Exception:
+            pass
+        await asyncio.sleep(5.0)
 
 
 app = FastAPI(
@@ -60,9 +106,9 @@ app.add_middleware(
 _V1 = "/api/v1"
 
 app.include_router(health_router)
+app.include_router(pwa_transcribe_router)
 app.include_router(admin_subdomain_router)
 app.include_router(admin_router)
-app.include_router(pwa_transcript_compat_router)
 # Legacy-compatible routes — mounted at root to match what the frontend calls
 app.include_router(google_auth_router)
 app.include_router(legacy_compat_router)

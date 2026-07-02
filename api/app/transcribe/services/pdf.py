@@ -4,12 +4,12 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from api.app.schemas.hospital.transcribe import (
+from api.app.transcribe.schemas.common import (
     ConsultationSession,
     DocumentArtifact,
     DocumentArtifactDelivery,
-    DraftConsultationDocument,
 )
+from api.app.transcribe.schemas.sessions import DraftConsultationDocument
 
 
 def _escape_pdf_text(value: str) -> str:

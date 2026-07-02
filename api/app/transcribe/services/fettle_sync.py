@@ -9,7 +9,7 @@ import httpx
 from fastapi import HTTPException
 
 from api.app.core.config import Settings
-from api.app.schemas.hospital.transcribe import ConsultationSession, ErrorResponse
+from api.app.transcribe.schemas.common import ConsultationSession, ErrorResponse
 
 
 class FettleSyncService:

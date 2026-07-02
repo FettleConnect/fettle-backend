@@ -22,3 +22,5 @@ livekit>=0.17.0
 livekit-api>=1.0.0,<2.0
 openai>=1.0.0
 redis>=4.0.0
+pypdf>=6.1.0
+PyMuPDF>=1.26.0

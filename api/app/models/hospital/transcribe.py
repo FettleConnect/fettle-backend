@@ -113,6 +113,7 @@ class TranscribeSession(Base):
     patient_age: Mapped[int | None] = mapped_column(Integer, nullable=True)
     case_status: Mapped[str] = mapped_column(String(32), default="open", index=True)
     status: Mapped[str] = mapped_column(String(64), default="draft", index=True)
+    report_context_state_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
@@ -214,9 +215,15 @@ class TranscribeReportContextItem(Base):
     document_id: Mapped[int] = mapped_column(
         ForeignKey("transcribe_report_context_documents.id", ondelete="CASCADE")
     )
+    source_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True)
     extracted_text: Mapped[str] = mapped_column(Text)
+    extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class TranscribeArtifact(Base):

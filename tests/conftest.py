@@ -40,8 +40,10 @@ _set_test_default("LIVEKIT_URL_INTERNAL", "http://localhost:7880")
 _set_test_default("LIVEKIT_URL", "")
 _set_test_default("LIVEKIT_API_KEY", "")
 _set_test_default("LIVEKIT_API_SECRET", "")
+_set_test_default("AI_PROVIDER", "mock")
 _set_test_default("OPENAI_API_KEY", "test-openai-key")
 _set_test_default("OPENROUTER_API_KEY", "test-openrouter-key")
+_set_test_default("REPORT_CONTEXT_PROVIDER", "mock")
 _set_test_default("LEGACY_AUTH_SECRET", "test-legacy-auth-secret")
 _set_test_default("INTERNAL_API_ENABLED", "false")
 _set_test_default("INTERNAL_API_KEY", "test-internal-key")
@@ -60,12 +62,12 @@ _set_test_default("ADMIN_PASSWORD", "platform-admin-password")
 import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
 from api.app.db.base import Base  # noqa: E402 — must come after env setup
 from api.app.db.session import get_async_session  # noqa: E402
-from api.app.db.transcribe import get_db_session  # noqa: E402
 from api.app.main import app  # noqa: E402
-from api.app.services.transcribe.bootstrap import (  # noqa: E402
+from api.app.transcribe.bootstrap import (  # noqa: E402
     reset_transcribe_runtime_state,
     seed_transcribe_defaults,
 )
+from api.app.transcribe.db import get_db_session  # noqa: E402
 
 # ── Test database engine ──────────────────────────────────────────────────────
 

@@ -1,23 +1,23 @@
-"""Root-level PWA transcript compatibility routes."""
-
 from __future__ import annotations
 
-import json
 import uuid
 from urllib.parse import parse_qs
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Header,
-    Query,
-    Request,
-    Response,
-    WebSocket,
-    WebSocketDisconnect,
-)
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, WebSocket
 
-from api.app.schemas.auth import (
+from api.app.transcribe.api.dependencies import (
+    get_auth_service,
+    get_fettle_sync_service,
+    get_live_transcription_service,
+    get_observability_service,
+    get_pdf_delivery_service,
+    get_queue_service,
+    get_session_service,
+    require_doctor,
+    require_internal_admin,
+)
+from api.app.transcribe.observability import ObservabilityService
+from api.app.transcribe.schemas.auth import (
     AuthMeResponse,
     ListDoctorsResponse,
     PinChangeRequest,
@@ -26,8 +26,22 @@ from api.app.schemas.auth import (
     PinLoginRequest,
     SelectDoctorSessionRequest,
 )
-from api.app.schemas.hospital.transcribe import (
+from api.app.transcribe.schemas.health import MigrationStatus
+from api.app.transcribe.schemas.queue import (
     AcceptQueueEntryResponse,
+    GetDoctorIntakeLinkResponse,
+    GetPatientProfileByPhoneResponse,
+    GetPublicIntakeLinkResponse,
+)
+from api.app.transcribe.schemas.queue import (
+    ListQueueEntriesResponse as QueueListResponse,
+)
+from api.app.transcribe.schemas.queue import (
+    SubmitPublicIntakeRequest,
+    SubmitPublicIntakeResponse,
+    UpdateQueueEntryResponse,
+)
+from api.app.transcribe.schemas.sessions import (
     CreateReportContextExtractionJobResponse,
     CreateSessionRequest,
     CreateSessionResponse,
@@ -36,54 +50,27 @@ from api.app.schemas.hospital.transcribe import (
     ExtractReportContextResponse,
     GenerateSessionPdfResponse,
     GetActiveReportContextExtractionJobResponse,
-    GetDoctorIntakeLinkResponse,
     GetPatientHistoryResponse,
-    GetPatientProfileByPhoneResponse,
-    GetPublicIntakeLinkResponse,
     GetReportContextExtractionJobResponse,
     GetSessionResponse,
-)
-from api.app.schemas.hospital.transcribe import (
-    ListQueueEntriesResponse as QueueListResponse,
-)
-from api.app.schemas.hospital.transcribe import (
     ListReportContextUploadsResponse,
     ListSessionsResponse,
-    MigrationStatus,
-    SubmitPublicIntakeRequest,
-    SubmitPublicIntakeResponse,
     SubmitSessionTranscriptionResponse,
     UpdateCaseStatusRequest,
     UpdateDraftDocumentResponse,
-    UpdateQueueEntryResponse,
     UploadReportContextFileResponse,
     UploadSessionAudioResponse,
 )
-from api.app.services.transcribe.auth import AuthService
-from api.app.services.transcribe.fettle_sync import FettleSyncService
-from api.app.services.transcribe.observability import ObservabilityService
-from api.app.services.transcribe.pdf_delivery import PdfDeliveryService
-from api.app.services.transcribe.queue import QueueService
-from api.app.services.transcribe.sessions import SessionService
-from api.app.services.transcribe.storage import LocalStorage
-from api.app.services.transcribe.transcription_provider import (
-    LocalTranscriptionProvider,
-)
-from api.app.views.pwa_transcript_dependencies import (
-    get_auth_service,
-    get_fettle_sync_service,
-    get_observability_service,
-    get_pdf_delivery_service,
-    get_queue_service,
-    get_session_service,
-    require_doctor,
-    require_internal_admin,
-)
+from api.app.transcribe.services.auth import AuthService
+from api.app.transcribe.services.fettle_sync import FettleSyncService
+from api.app.transcribe.services.live_transcription import LiveTranscriptionService
+from api.app.transcribe.services.pdf_delivery import PdfDeliveryService
+from api.app.transcribe.services.queue import QueueService
+from api.app.transcribe.services.sessions import SessionService
+from api.app.transcribe.storage import LocalStorage
 
-# LEGACY: root-level Express-style routes consumed by the PWA transcript client.
 router = APIRouter(tags=["transcribe"])
 SAMPLE_PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
-_live_transcription_provider = LocalTranscriptionProvider()
 
 
 def _json_error_response(status_code: int, message: str) -> Response:
@@ -111,6 +98,30 @@ def _build_live_preview_segments(
         }
         for segment in transcript_segments
     ]
+
+
+def _build_mock_live_preview(session) -> list[dict]:
+    patient_label = session.patient.name or "Patient"
+    doctor_label = session.doctor.name or "Doctor"
+    return _build_live_preview_segments(
+        [
+            {
+                "speaker": "doctor",
+                "speakerLabel": doctor_label,
+                "text": f"Good morning {patient_label}. Tell me what has been bothering you today.",
+                "startedAtSeconds": 0,
+                "endedAtSeconds": 5,
+            },
+            {
+                "speaker": "patient",
+                "speakerLabel": patient_label,
+                "text": "I have had a persistent cough, throat irritation, and mild fever for the last three days.",
+                "startedAtSeconds": 5,
+                "endedAtSeconds": 11,
+            },
+        ],
+        is_final=False,
+    )
 
 
 @router.get("/internal/migration-status", response_model=MigrationStatus)
@@ -164,6 +175,7 @@ async def select_doctor(
 @router.post(
     "/auth/pin/login",
     response_model=PinLoginAuthenticatedResponse | PinLoginPinChangeRequiredResponse,
+    response_model_exclude_none=True,
     tags=["auth"],
 )
 async def login_with_pin(
@@ -173,7 +185,7 @@ async def login_with_pin(
     return await auth_service.login_with_pin(request.doctorId, request.pin)
 
 
-@router.post("/auth/pin/change", tags=["auth"])
+@router.post("/auth/pin/change", response_model_exclude_none=True, tags=["auth"])
 async def change_pin(
     request: PinChangeRequest,
     auth_service: AuthService = Depends(get_auth_service),
@@ -184,69 +196,19 @@ async def change_pin(
 @router.websocket("/live-transcription")
 async def live_transcription_socket(
     websocket: WebSocket,
-    auth_service: AuthService = Depends(get_auth_service),
-    session_service: SessionService = Depends(get_session_service),
+    live_transcription_service: LiveTranscriptionService = Depends(
+        get_live_transcription_service
+    ),
 ) -> None:
-    await websocket.accept()
-    live_session_id = str(uuid.uuid4())
-    started = False
-    preview_segments: list[dict] = []
-    try:
-        while True:
-            message = await websocket.receive()
-            if "text" in message and message["text"] is not None:
-                try:
-                    payload = json.loads(message["text"])
-                except Exception:
-                    continue
-                msg_type = payload.get("type")
-                if msg_type == "start":
-                    access_token = str(payload.get("accessToken", "")).strip()
-                    session_id = str(payload.get("sessionId", "")).strip()
-                    doctor = (await auth_service.current_doctor(access_token)).doctor
-                    session = await session_service.get_session(session_id, doctor.id)
-                    transcript = await _live_transcription_provider.transcribe(session)
-                    preview_segments = _build_live_preview_segments(
-                        list(transcript.get("transcriptSegments", [])),
-                        is_final=False,
-                    )
-                    started = True
-                    await websocket.send_json(
-                        {"type": "ready", "liveSessionId": live_session_id}
-                    )
-                    await websocket.send_json(
-                        {"type": "preview", "segments": preview_segments}
-                    )
-                    continue
-                if not started:
-                    continue
-                if msg_type == "stop":
-                    await websocket.send_json(
-                        {
-                            "type": "preview",
-                            "segments": [
-                                {**segment, "isFinal": True}
-                                for segment in preview_segments
-                            ],
-                        }
-                    )
-                    continue
-                if msg_type in {"pause", "resume"}:
-                    continue
-            if (
-                "bytes" in message
-                and message["bytes"] is not None
-                and started
-                and preview_segments
-            ):
-                await websocket.send_json(
-                    {"type": "preview", "segments": preview_segments}
-                )
-    except WebSocketDisconnect:
-        return
+    await live_transcription_service.handle(websocket)
 
 
-@router.get("/auth/me", response_model=AuthMeResponse, tags=["auth"])
+@router.get(
+    "/auth/me",
+    response_model=AuthMeResponse,
+    response_model_exclude_none=True,
+    tags=["auth"],
+)
 async def auth_me(doctor=Depends(require_doctor)) -> AuthMeResponse:
     return AuthMeResponse(doctor=doctor)
 
@@ -254,6 +216,7 @@ async def auth_me(doctor=Depends(require_doctor)) -> AuthMeResponse:
 @router.post(
     "/sessions",
     response_model=CreateSessionResponse,
+    response_model_exclude_none=True,
     status_code=201,
     tags=["sessions"],
 )
@@ -267,7 +230,12 @@ async def create_session(
     )
 
 
-@router.get("/sessions", response_model=ListSessionsResponse, tags=["sessions"])
+@router.get(
+    "/sessions",
+    response_model=ListSessionsResponse,
+    response_model_exclude_none=True,
+    tags=["sessions"],
+)
 async def list_sessions(
     search: str | None = Query(default=None),
     doctor=Depends(require_doctor),
@@ -279,7 +247,10 @@ async def list_sessions(
 
 
 @router.get(
-    "/sessions/{session_id}", response_model=GetSessionResponse, tags=["sessions"]
+    "/sessions/{session_id}",
+    response_model=GetSessionResponse,
+    response_model_exclude_none=True,
+    tags=["sessions"],
 )
 async def get_session(
     session_id: str,
@@ -294,6 +265,7 @@ async def get_session(
 @router.get(
     "/sessions/{session_id}/patient-history",
     response_model=GetPatientHistoryResponse,
+    response_model_exclude_none=True,
     tags=["sessions"],
 )
 async def get_patient_history(
@@ -323,6 +295,7 @@ async def get_patient_profile_by_phone(
 @router.patch(
     "/sessions/{session_id}/case-status",
     response_model=GetSessionResponse,
+    response_model_exclude_none=True,
     tags=["sessions"],
 )
 async def update_case_status(
@@ -341,6 +314,7 @@ async def update_case_status(
 @router.post(
     "/sessions/{session_id}/audio",
     response_model=UploadSessionAudioResponse,
+    response_model_exclude_none=True,
     status_code=201,
     tags=["sessions"],
 )
@@ -368,6 +342,7 @@ async def upload_session_audio(
 @router.post(
     "/sessions/{session_id}/transcription",
     response_model=SubmitSessionTranscriptionResponse,
+    response_model_exclude_none=True,
     status_code=202,
     tags=["sessions"],
 )
@@ -386,6 +361,7 @@ async def submit_session_transcription(
 @router.put(
     "/sessions/{session_id}/draft-document",
     response_model=UpdateDraftDocumentResponse,
+    response_model_exclude_none=True,
     tags=["sessions"],
 )
 async def update_draft_document(
@@ -403,6 +379,7 @@ async def update_draft_document(
 @router.post(
     "/sessions/{session_id}/pdf",
     response_model=GenerateSessionPdfResponse,
+    response_model_exclude_none=True,
     tags=["sessions"],
 )
 async def generate_session_pdf(
@@ -575,6 +552,7 @@ async def extract_report_context(
 @router.post(
     "/sessions/{session_id}/report-context/extract-async",
     response_model=CreateReportContextExtractionJobResponse,
+    response_model_exclude_none=True,
     status_code=202,
     tags=["report-context"],
 )
@@ -609,6 +587,7 @@ async def get_active_report_context_extraction_job(
 @router.get(
     "/sessions/{session_id}/report-context/jobs/{job_id}",
     response_model=GetReportContextExtractionJobResponse,
+    response_model_exclude_none=True,
     tags=["report-context"],
 )
 async def get_report_context_extraction_job(
@@ -636,7 +615,10 @@ async def stream_report_context_extraction_job(
     job = await session_service.get_report_context_extraction_job(
         session_id, job_id, doctor.id
     )
-    payload = f"retry: 2000\n\nevent: job\ndata: {job.model_dump_json()}\n\n"
+    payload = (
+        f"retry: 2000\n\nevent: job\ndata: "
+        f"{job.model_dump_json(exclude_none=True)}\n\n"
+    )
     return Response(
         content=payload,
         media_type="text/event-stream",
@@ -647,6 +629,7 @@ async def stream_report_context_extraction_job(
 @router.post(
     "/sessions/{session_id}/report-context/jobs/{job_id}/cancel",
     response_model=GetReportContextExtractionJobResponse,
+    response_model_exclude_none=True,
     tags=["report-context"],
 )
 async def cancel_report_context_extraction_job(
@@ -707,6 +690,7 @@ async def apply_report_context_draft(
 @router.get(
     "/public/intake/{token}",
     response_model=GetPublicIntakeLinkResponse,
+    response_model_exclude_none=True,
     tags=["public-intake"],
 )
 async def get_public_intake_link(
@@ -721,6 +705,7 @@ async def get_public_intake_link(
 @router.get(
     "/public/intake/{token}/patient-profile",
     response_model=GetPatientProfileByPhoneResponse,
+    response_model_exclude_none=True,
     tags=["public-intake"],
 )
 async def get_public_patient_profile(
@@ -735,6 +720,7 @@ async def get_public_patient_profile(
 @router.get(
     "/public/intake/by-slug/{department_slug}/{doctor_name_slug}",
     response_model=GetPublicIntakeLinkResponse,
+    response_model_exclude_none=True,
     tags=["public-intake"],
 )
 async def get_public_intake_link_by_slug(
@@ -753,6 +739,7 @@ async def get_public_intake_link_by_slug(
 @router.post(
     "/public/intake/{token}",
     response_model=SubmitPublicIntakeResponse,
+    response_model_exclude_none=True,
     status_code=201,
     tags=["public-intake"],
 )
@@ -766,7 +753,12 @@ async def submit_public_intake(
     )
 
 
-@router.get("/intake-link", response_model=GetDoctorIntakeLinkResponse, tags=["queue"])
+@router.get(
+    "/intake-link",
+    response_model=GetDoctorIntakeLinkResponse,
+    response_model_exclude_none=True,
+    tags=["queue"],
+)
 async def get_doctor_intake_link(
     doctor=Depends(require_doctor),
     queue_service: QueueService = Depends(get_queue_service),
@@ -776,7 +768,12 @@ async def get_doctor_intake_link(
     )
 
 
-@router.get("/queue", response_model=QueueListResponse, tags=["queue"])
+@router.get(
+    "/queue",
+    response_model=QueueListResponse,
+    response_model_exclude_none=True,
+    tags=["queue"],
+)
 async def list_queue_entries(
     doctor=Depends(require_doctor),
     queue_service: QueueService = Depends(get_queue_service),
@@ -787,6 +784,7 @@ async def list_queue_entries(
 @router.post(
     "/queue/{queue_entry_id}/accept",
     response_model=AcceptQueueEntryResponse,
+    response_model_exclude_none=True,
     status_code=201,
     tags=["queue"],
 )
@@ -802,6 +800,7 @@ async def accept_queue_entry(
 @router.post(
     "/queue/{queue_entry_id}/no-show",
     response_model=UpdateQueueEntryResponse,
+    response_model_exclude_none=True,
     tags=["queue"],
 )
 async def mark_queue_entry_no_show(
@@ -817,6 +816,7 @@ async def mark_queue_entry_no_show(
 @router.post(
     "/queue/{queue_entry_id}/cancel",
     response_model=UpdateQueueEntryResponse,
+    response_model_exclude_none=True,
     tags=["queue"],
 )
 async def cancel_queue_entry(
