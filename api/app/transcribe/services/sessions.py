@@ -432,8 +432,7 @@ class SessionService:
     async def list_report_context_uploads(
         self, session_id: str, doctor_id: str
     ) -> list[ReportContextUpload]:
-        session = await self.get_session(session_id, doctor_id)
-        self._ensure_report_context_ready_for_uploads(session)
+        await self.get_session(session_id, doctor_id)
         uploads = await self.repository.list_report_context_uploads(
             session_id, doctor_id
         )

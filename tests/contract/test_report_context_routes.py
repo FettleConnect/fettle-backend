@@ -47,6 +47,26 @@ def _create_completed_session(client):
     raise AssertionError("transcription did not complete")
 
 
+def test_list_report_context_uploads_returns_empty_before_transcription(client) -> None:
+    headers = _auth_headers(client)
+    session = client.post(
+        "/sessions",
+        json={
+            "patientName": "Nisha",
+            "patientPhoneNumber": "3333333333",
+            "patientAge": 36,
+        },
+        headers=headers,
+    ).json()["session"]
+
+    listed = client.get(
+        f"/sessions/{session['id']}/report-context/uploads", headers=headers
+    )
+
+    assert listed.status_code == 200
+    assert listed.json() == {"uploads": []}
+
+
 def test_upload_and_list_report_context_files(client) -> None:
     headers, session = _create_completed_session(client)
 
