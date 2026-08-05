@@ -61,7 +61,7 @@ class TestTenantBranding:
     async def test_branding_returns_config(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, cfg_id, token = await _create_hospital_with_config(
+        _org_id, _cfg_id, token = await _create_hospital_with_config(
             async_client, db_session
         )
         resp = await async_client.get(

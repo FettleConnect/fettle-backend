@@ -19,7 +19,7 @@ class LoginRequest(BaseModel):
         return v.strip().lower() if v else None
 
     @model_validator(mode="after")
-    def require_identifier(self) -> "LoginRequest":
+    def require_identifier(self) -> LoginRequest:
         if not self.email and not self.username:
             raise ValueError("email or username is required")
         return self

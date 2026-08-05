@@ -7,7 +7,7 @@ from sqlalchemy.sql.schema import Table
 
 class TestModelsImportable:
     def test_import_all_models(self) -> None:
-        import api.app.models as models
+        from api.app import models
 
         expected_exports = [
             "ActivityBooking",

@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, time
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-if TYPE_CHECKING:
-    pass
 
 from api.app.db.session import get_async_session
 from api.app.models.auth import User
@@ -305,7 +301,7 @@ async def get_session_artifact(
     artifact_type: str,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> "Response":
+) -> Response:
     """Stream session artifact (transcript, audio) from S3."""
     from fastapi.responses import Response as _Response
 

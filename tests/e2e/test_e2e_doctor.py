@@ -68,7 +68,7 @@ class TestDoctorFlow:
         9. View MediVoice session with transcripts
         10. Verify multi-tenant: only see own org's sessions
         """
-        org_id, token, doctor_id, doctor_email = await _setup_doctor(
+        org_id, token, _doctor_id, doctor_email = await _setup_doctor(
             async_client, db_session
         )
         auth = {"Authorization": f"Bearer {token}"}
@@ -255,7 +255,7 @@ class TestDoctorArtifacts:
     async def test_transcript_artifact(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, doctor_id, _ = await _setup_doctor(async_client, db_session)
+        _org_id, token, _doctor_id, _ = await _setup_doctor(async_client, db_session)
         auth = {"Authorization": f"Bearer {token}"}
 
         r = await async_client.post(

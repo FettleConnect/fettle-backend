@@ -77,7 +77,7 @@ class TestHospitalAdminFlow:
         10. View all hospitals (admin-only)
         11. Multi-tenant isolation: confirm other org's data not visible
         """
-        org_id, token, admin_id = await _create_admin_hospital(async_client, db_session)
+        org_id, token, _admin_id = await _create_admin_hospital(async_client, db_session)
         auth = {"Authorization": f"Bearer {token}"}
 
         # ── 1. Token validation ──────────────────────────────────────────────
@@ -252,7 +252,7 @@ class TestHospitalAdminFlow:
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
         """Admins get full permissions."""
-        org_id, token, _ = await _create_admin_hospital(async_client, db_session)
+        _org_id, token, _ = await _create_admin_hospital(async_client, db_session)
         r = await async_client.get(
             "/api/v1/auth/tab-access", headers={"Authorization": f"Bearer {token}"}
         )

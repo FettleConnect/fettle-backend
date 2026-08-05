@@ -272,8 +272,7 @@ async def set_broadcast_text(
         async def _broadcast():
             for number in body.target_numbers:
                 n = number.strip()
-                if n.endswith(".0"):
-                    n = n[:-2]
+                n = n.removesuffix(".0")
                 if not n.startswith("+"):
                     n = "+91" + n
 

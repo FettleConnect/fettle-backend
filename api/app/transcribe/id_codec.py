@@ -48,4 +48,4 @@ def decode_public_id(value: str, entity: str) -> int:
     code = int(payload[0:2], 16)
     if CODE_TO_ENTITY.get(code) != entity:
         raise ValueError(f"invalid {entity} id")
-    return int(payload[2:], 16)
+    return int(payload, 0)

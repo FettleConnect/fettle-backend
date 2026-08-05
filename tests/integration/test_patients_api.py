@@ -202,7 +202,7 @@ class TestPatientCallHistory:
         from api.app.models.hospital.patient import Patient
         from api.app.models.organization import Organization
 
-        org_id, token, _ = await _setup_org_and_token(async_client, db_session)
+        _org_id, token, _ = await _setup_org_and_token(async_client, db_session)
         other_org = Organization(
             id=uuid.uuid4(),
             name="Other",

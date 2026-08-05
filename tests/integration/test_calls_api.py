@@ -65,7 +65,7 @@ class TestOutboundCallDispatch:
     async def test_individual_call_queued(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, patient_id = await _setup_hospital(async_client, db_session)
+        _org_id, token, patient_id = await _setup_hospital(async_client, db_session)
         resp = await async_client.post(
             "/api/v1/calls/outbound",
             headers={"Authorization": f"Bearer {token}"},
@@ -83,7 +83,7 @@ class TestOutboundCallDispatch:
     async def test_campaign_trigger(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, _ = await _setup_hospital(async_client, db_session)
+        _org_id, token, _ = await _setup_hospital(async_client, db_session)
         resp = await async_client.post(
             "/api/v1/calls/outbound",
             headers={"Authorization": f"Bearer {token}"},
@@ -181,7 +181,7 @@ class TestExcelExport:
     async def test_excel_export_returns_xlsx(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, _ = await _setup_hospital(async_client, db_session)
+        _org_id, token, _ = await _setup_hospital(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/calls/export",
             headers={"Authorization": f"Bearer {token}"},
@@ -230,7 +230,7 @@ class TestMediVoiceSessions:
     async def test_create_medivoice_session(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, doctor_id = await self._setup_doctor(async_client, db_session)
+        _org_id, token, _doctor_id = await self._setup_doctor(async_client, db_session)
         resp = await async_client.post(
             "/api/v1/medivoice/sessions",
             headers={"Authorization": f"Bearer {token}"},
@@ -248,7 +248,7 @@ class TestMediVoiceSessions:
     async def test_list_medivoice_sessions(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, doctor_id = await self._setup_doctor(async_client, db_session)
+        _org_id, token, _doctor_id = await self._setup_doctor(async_client, db_session)
         # Create a session first
         await async_client.post(
             "/api/v1/medivoice/sessions",

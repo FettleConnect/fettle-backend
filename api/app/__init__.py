@@ -6,5 +6,5 @@ import types
 if __name__ == "app":
     api_package = sys.modules.setdefault("api", types.ModuleType("api"))
     api_package.__path__ = []  # type: ignore[attr-defined]
-    setattr(api_package, "app", sys.modules[__name__])
+    api_package.app = sys.modules[__name__]
     sys.modules.setdefault("api.app", sys.modules[__name__])

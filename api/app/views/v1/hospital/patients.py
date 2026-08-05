@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import uuid
 from datetime import date, datetime, timezone
-from typing import Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -42,13 +41,13 @@ async def list_patients(
     call_status: str = Query(
         default="", description="Comma-separated: connected,not_connected,in_progress"
     ),
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
-    department: Optional[str] = Query(default=None),
-    limit: Optional[str] = Query(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    department: str | None = Query(default=None),
+    limit: str | None = Query(
         default=None, description="Integer or 'all' or 'latest'"
     ),
-    patient_ids: Optional[str] = Query(
+    patient_ids: str | None = Query(
         default=None, description="Comma-separated UUIDs"
     ),
     current_user: User = Depends(get_current_user),
@@ -347,8 +346,7 @@ async def upload_patients(
             for _, row in df.iterrows():
                 p_name = str(row[name_col])
                 p_mobile = str(row[mobile_col]).strip()
-                if p_mobile.endswith(".0"):
-                    p_mobile = p_mobile[:-2]
+                p_mobile = p_mobile.removesuffix(".0")
 
                 dept_col = _get_col(list(df.columns), "department")
                 p_dept = str(row[dept_col]) if dept_col else "General"

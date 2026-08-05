@@ -4,9 +4,8 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from datetime import time as dt_time
-from datetime import timedelta, timezone
 from typing import Any, cast
 
 import boto3
@@ -14,7 +13,7 @@ import redis as _redis_lib
 from asgiref.sync import async_to_sync
 from sqlalchemy import select, update
 
-from api.app.celery_app import celery_app  # noqa: F401 (registers tasks on import)
+from api.app.celery_app import celery_app
 from api.app.core.config import settings
 from api.app.db.base import AsyncSessionLocal
 from api.app.services.llm import llm_client, openrouter_model
@@ -200,10 +199,9 @@ async def _get_campaign_patients(campaign_id: str, organization_id: str) -> list
                         campaign.start_date, campaign.end_date
                     )
                 )
-        elif campaign.audience_type == "upload":
-            if campaign.patient_ids:
-                pids = [uuid.UUID(pid) for pid in campaign.patient_ids]
-                q = q.where(Patient.id.in_(pids))
+        elif campaign.audience_type == "upload" and campaign.patient_ids:
+            pids = [uuid.UUID(pid) for pid in campaign.patient_ids]
+            q = q.where(Patient.id.in_(pids))
 
         if campaign.unconnected_only:
             ever_connected = select(OutboundCall.patient_id).where(
