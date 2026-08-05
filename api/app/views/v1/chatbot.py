@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import uuid
 from datetime import timedelta
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -332,7 +332,7 @@ async def patient_auth(
 
 @router.get("/chat")
 async def get_chat_history(
-    thread_id: Optional[str] = None,
+    thread_id: str | None = None,
     patient: DermatologyPatient = Depends(_get_current_patient),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:

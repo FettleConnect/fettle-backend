@@ -32,14 +32,12 @@ from api.app.transcribe.schemas.queue import (
     GetDoctorIntakeLinkResponse,
     GetPatientProfileByPhoneResponse,
     GetPublicIntakeLinkResponse,
-)
-from api.app.transcribe.schemas.queue import (
-    ListQueueEntriesResponse as QueueListResponse,
-)
-from api.app.transcribe.schemas.queue import (
     SubmitPublicIntakeRequest,
     SubmitPublicIntakeResponse,
     UpdateQueueEntryResponse,
+)
+from api.app.transcribe.schemas.queue import (
+    ListQueueEntriesResponse as QueueListResponse,
 )
 from api.app.transcribe.schemas.sessions import (
     CreateReportContextExtractionJobResponse,

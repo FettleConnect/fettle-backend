@@ -8,7 +8,7 @@ def json_audio(
     patient_id: str,
     text: str,
     called_at: datetime | None,
-    duration: str | int | float | None,
+    duration: str | float | None,
 ) -> dict[str, Any]:
     normalized = " ".join(text.split())
     lowered = normalized.lower()

@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse, urlunparse
 
@@ -59,15 +58,15 @@ _set_test_default("FETTLE_SYNC_SECRET", "test-secret")
 _set_test_default("ADMIN_USERNAME", "platform-admin")
 _set_test_default("ADMIN_PASSWORD", "platform-admin-password")
 
-import api.app.models  # noqa: F401, E402 — registers all tables with Base.metadata
-from api.app.db.base import Base  # noqa: E402 — must come after env setup
-from api.app.db.session import get_async_session  # noqa: E402
-from api.app.main import app  # noqa: E402
-from api.app.transcribe.bootstrap import (  # noqa: E402
+import api.app.models  # noqa: F401 — registers all tables with Base.metadata
+from api.app.db.base import Base
+from api.app.db.session import get_async_session
+from api.app.main import app
+from api.app.transcribe.bootstrap import (
     reset_transcribe_runtime_state,
     seed_transcribe_defaults,
 )
-from api.app.transcribe.db import get_db_session  # noqa: E402
+from api.app.transcribe.db import get_db_session
 
 # ── Test database engine ──────────────────────────────────────────────────────
 

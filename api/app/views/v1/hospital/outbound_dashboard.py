@@ -3,7 +3,6 @@ from __future__ import annotations
 from calendar import month_abbr
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Float, cast, func, select
@@ -78,8 +77,8 @@ def _naturaltime(dt: datetime) -> str:
 
 @router.get("/kpi", response_model=KPISummaryResponse)
 async def kpi_summary(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> KPISummaryResponse:
@@ -366,8 +365,8 @@ async def admin_dashboard(
 
 @router.get("/patient-engagement", response_model=PatientEngagementResponse)
 async def patient_engagement(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> PatientEngagementResponse:
@@ -464,8 +463,8 @@ async def patient_engagement(
 
 @router.get("/community-engagement", response_model=CommunityEngagementResponse)
 async def community_engagement(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> CommunityEngagementResponse:
@@ -696,8 +695,8 @@ async def community_engagement(
 
 @router.get("/revisit-analytics", response_model=RevisitAnalyticsResponse)
 async def revisit_analytics(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> RevisitAnalyticsResponse:
@@ -811,8 +810,8 @@ async def revisit_analytics(
 
 @router.get("/escalation-engagement", response_model=EscalationEngagementResponse)
 async def escalation_engagement(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> EscalationEngagementResponse:
@@ -980,8 +979,8 @@ async def escalation_engagement(
 @router.get("/roi")
 async def roi_metrics(
     call_direction: str = Query(default="outbound", enum=["outbound", "inbound"]),
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
@@ -1101,8 +1100,8 @@ async def roi_metrics(
 @router.get("/departments")
 async def department_analytics(
     call_direction: str = Query(default="outbound", enum=["outbound", "inbound"]),
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:

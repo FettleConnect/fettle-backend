@@ -44,12 +44,12 @@ class TestJWT:
     def _make_token(self, **kwargs):
         from api.app.core.security import create_access_token
 
-        defaults = dict(
-            user_id=uuid.uuid4(),
-            email="test@hospital.com",
-            organization_id=uuid.uuid4(),
-            role="hospital_user",
-        )
+        defaults = {
+            "user_id": uuid.uuid4(),
+            "email": "test@hospital.com",
+            "organization_id": uuid.uuid4(),
+            "role": "hospital_user",
+        }
         defaults.update(kwargs)
         return create_access_token(**defaults)
 

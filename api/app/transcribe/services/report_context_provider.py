@@ -3,9 +3,10 @@ from __future__ import annotations
 import base64
 import json
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import fitz
 import httpx

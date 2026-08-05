@@ -77,7 +77,7 @@ class TestAgentEscalation:
 
         from api.app.models.hospital.call import Escalation
 
-        org_id, _, patient_id = await _setup_hospital_with_patient(
+        _org_id, _, patient_id = await _setup_hospital_with_patient(
             async_client, db_session
         )
         secret = os.environ.get("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
@@ -107,7 +107,7 @@ class TestAgentEscalation:
     async def test_escalation_by_patient_id(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, _, patient_id = await _setup_hospital_with_patient(
+        _org_id, _, patient_id = await _setup_hospital_with_patient(
             async_client, db_session
         )
         secret = os.environ.get("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
@@ -331,7 +331,7 @@ class TestDermatologyDoctor:
     async def test_doctor_list_consultations(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, _ = await self._setup_doctor(async_client, db_session)
+        _org_id, token, _ = await self._setup_doctor(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/chatbot/doctor/consultations",
             headers={"Authorization": f"Bearer {token}"},

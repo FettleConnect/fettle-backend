@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import uuid
 from datetime import date, datetime
-from typing import Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -138,8 +137,8 @@ async def process_outbound(
 
 @router.get("/inbound/")
 async def list_inbound_calls(
-    start_date: Optional[date] = Query(default=None),
-    end_date: Optional[date] = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:

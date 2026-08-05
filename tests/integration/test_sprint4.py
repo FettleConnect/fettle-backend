@@ -269,7 +269,7 @@ class TestCampaignCRUD:
         from api.app.models.hospital.campaign import Campaign
         from api.app.models.organization import Organization
 
-        org_id, token, _, _ = await _hospital_setup(async_client, db_session)
+        _org_id, token, _, _ = await _hospital_setup(async_client, db_session)
         other_org = Organization(
             id=uuid.uuid4(),
             name="Other",
@@ -296,7 +296,7 @@ class TestDoctorManagement:
     async def test_list_doctors(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        _, token, _, doctor_id = await _hospital_setup(async_client, db_session)
+        _, token, _, _doctor_id = await _hospital_setup(async_client, db_session)
         resp = await async_client.get(
             "/api/v1/doctors/",
             headers={"Authorization": f"Bearer {token}"},
@@ -382,7 +382,7 @@ class TestPatientPhoneLookup:
     ) -> None:
         import os
 
-        _, _, patient_id, _ = await _hospital_setup(async_client, db_session)
+        _, _, _patient_id, _ = await _hospital_setup(async_client, db_session)
         secret = os.environ.get("INTERNAL_API_SHARED_SECRET", "test-internal-secret")
 
         resp = await async_client.get(
@@ -422,7 +422,7 @@ class TestMediVoiceSync:
     ) -> None:
         import os
 
-        org_id, token, _, doctor_id = await _hospital_setup(async_client, db_session)
+        _org_id, _token, _, doctor_id = await _hospital_setup(async_client, db_session)
         # Need doctor email for sync
         from sqlalchemy import select
 

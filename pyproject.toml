@@ -1,3 +1,7 @@
 [tool.isort]
 profile = "black"
 skip_glob = ["api/alembic/*.py", "api/alembic/versions/*.py"]
+
+[tool.ruff]
+[tool.ruff.lint]
+ignore = ["B008", "RUF059", "BLE001", "TRY401", "S110", "DTZ005", "EXE001", "SIM117", "LOG015", "PLW1508", "DTZ007", "DTZ003", "DTZ011", "ASYNC221", "SIM102"]

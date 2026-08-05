@@ -79,7 +79,7 @@ class TestHospitalStaffFlow:
         8. Export patient Excel report
         9. Confirm staff CANNOT see other org patients
         """
-        org_id, token, patients = await _setup_staff_with_patients(
+        _org_id, token, patients = await _setup_staff_with_patients(
             async_client, db_session
         )
         auth = {"Authorization": f"Bearer {token}"}
@@ -234,7 +234,7 @@ class TestHospitalStaffFlow:
     async def test_staff_call_history_for_patient(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, patients = await _setup_staff_with_patients(
+        _org_id, token, patients = await _setup_staff_with_patients(
             async_client, db_session
         )
         auth = {"Authorization": f"Bearer {token}"}
@@ -262,7 +262,7 @@ class TestHospitalStaffFlow:
     async def test_staff_broadcast_text(
         self, async_client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        org_id, token, _ = await _setup_staff_with_patients(async_client, db_session)
+        _org_id, token, _ = await _setup_staff_with_patients(async_client, db_session)
         auth = {"Authorization": f"Bearer {token}"}
 
         r = await async_client.post(

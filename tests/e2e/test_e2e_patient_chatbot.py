@@ -66,7 +66,7 @@ class TestPatientChatbotFlow:
         10. Doctor reviews + responds
         """
         org_id = await _setup_org(db_session)
-        doc_id, doc_token = await _setup_doctor(db_session, org_id, async_client)
+        _doc_id, doc_token = await _setup_doctor(db_session, org_id, async_client)
 
         patient_email = f"patient_{uuid.uuid4().hex[:8]}@patient.com"
         patient_name = "E2E Chatbot Patient"
